@@ -1,0 +1,10 @@
+first I made a decent Makefile system
+got it working on OSX, Linux, MinGW ... all but MSVC
+then I found myself wanting to build stuff with MSVC ... without making those stupid .vcproj files, or another NMAKE script, or rewriting everything
+because, if you have to rewrite everything, why use a shitty one-platform shit-tool to do it?
+so I found myself in need of a rewrite.
+hence this simple build system.
+
+it reads files labelled 'buildinfo'
+each buildinfo specifies the distribution name, type, and any dependencies.
+they optionally can have a depend() function that sets up any other dependencies needed for projects that depend on them.
