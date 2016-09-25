@@ -1,17 +1,16 @@
-local lfs = require 'lfs'
 local table = require 'ext.table'
+local io = require 'ext.io'
 
 local function rfind(dir, pattern, results)
-	for f in lfs.dir(dir) do
-		if f ~= '.' and f ~= '..' then
-			local path = dir..'/'..f
-			local attr = lfs.attributes(path)
-			if attr.mode == 'file' then
-				if not pattern or path:match(pattern) then
-					results:insert(path)
-				end
-			elseif attr.mode == 'directory' then
-				rfind(path, pattern, results)
+	--for f in lfs.dir(dir) do
+	for f in file[dir]() do
+		local path = dir..'/'..f
+		local attr = lfs.attributes(path)
+		if io.isdir(path) then
+			rfind(path, pattern, results)
+		else
+			if not pattern or path:match(pattern) then
+				results:insert(path)
 			end
 		end
 	end
@@ -19,8 +18,7 @@ end
 
 local function find(dir, pattern)
 	local results = table()
-	local attr = lfs.attributes(dir)
-	if attr and attr.mode == 'directory' then
+	if io.isdir(dir) then
 		rfind(dir, pattern, results)
 	end
 	return results
