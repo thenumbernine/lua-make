@@ -1,8 +1,8 @@
 #!/usr/bin/env lua -lluarocks.require
 --[[
-lua-make
-execute by lua -lmake
+lua make.lua [cmd]
 reads buildinfo
+cmd is: build debug release clean distclean
 --]]
 
 require 'ext'
@@ -61,14 +61,15 @@ end
 
 function Env:buildDist(dist, objs)
 	print('building '..dist..' from '..objs:concat' ')	
-	self:mkdir(io.getfiledir(dist))
+	local distdir = io.getfiledir(dist)
+	self:mkdir(distdir)
 	exec(
 		table{linker, linkFlags}
 		:append(objs)
 		:append(libpaths:map(function(libpath) return linkLibPathFlag..libpath end))
 		:append(libs:map(function(lib) return linkLibFlag..lib end))
 		:append(dynamicLibs)
-		:append{linkOutputFlag, dist}
+		:append{linkOutputFlag..dist}
 		:concat' '
 	)
 end
@@ -79,6 +80,7 @@ function GCC:preConfig()
 	objSuffix = '.o'
 	libPrefix = 'lib'
 	libSuffix = '.so'
+	appSuffix = ''
 	compiler = 'g++'
 	compileFlags = '-c -Wall -fPIC'
 	if build == 'debug' then
@@ -93,7 +95,7 @@ function GCC:preConfig()
 	linkLibPathFlag = '-L'
 	linkLibFlag = '-l'
 	linkFlags = ''
-	linkOutputFlag = '-o'
+	linkOutputFlag = '-o '
 	GCC.super.preConfig(self)
 end
 
@@ -106,6 +108,9 @@ function GCC:postConfig()
 		compileFlags = compileFlags .. ' -pthread'
 		linkFlags = linkFlags .. ' -pthread'
 	end
+	if distType == 'app' then
+		linkFlags = linkFlags .. ' -Wl,-rpath=lib'
+	end
 	GCC.super.postConfig(self)
 end
 
@@ -114,6 +119,15 @@ local GCCLinux = class(GCC)
 function GCCLinux:preConfig()
 	platform = 'linux'
 	GCCLinux.super.preConfig(self)
+end
+
+function GCCLinux:buildDist(...)
+	GCCLinux.super.buildDist(self, ...)
+	
+	local distdir = io.getfiledir(dist)
+	self:mkdir(distdir..'/lib')
+	-- TODO copy all libs into distdir/lib
+	-- and make sure their rpath is correct
 end
 
 local MinGW = class(GCC)
@@ -134,111 +148,226 @@ function MSVCWindows:preConfig()
 	objSuffix = '.obj'
 	libPrefix = ''
 	libSuffix = '.dll'
+	appSuffix = '.exe'
 	compiler = 'cl.exe'
-	compileFlags = '/nologo /c /Wall /EHsc'
+	compileFlags = '/nologo /c /EHsc'
+	-- no /Wall, because msvc adds extra crap to Wall
 	if build == 'debug' then
-		compileFlags = compileFlags .. ' /Od /GZ /Zi'
+		compileFlags = compileFlags .. ' /Od /Zi'
 	elseif build == 'release' then
-		compileFlags = compileFlags .. ' /Og /Ot /Ox'
+		compileFlags = compileFlags .. ' /Ot /Ox'
 	end
 	compileOutputFlag = '/Fo:'
 	compileIncludeFlag = '/I'
 	compileMacroFlag = '/D'
-	linker = 'lib.exe'
+	linker = 'cl.exe'
 	linkLibPathFlag = ''
 	linkLibFlag = ''
-	linkOutputFlag = ''
+	linkFlags = ''
+	linkOutputFlag = '/Fe: '
 	MSVCWindows.super.preConfig(self)
+end
+
+function MSVCWindows:postConfig()
+	if distType == 'lib' then
+		if build == 'debug' then
+			linkFlags = linkFlags .. ' /LDd'
+		elseif build == 'release' then
+			linkFlags = linkFlags .. ' /LD'
+		end
+	elseif distType == 'app' then
+		if build == 'debug' then
+			linkFlags = linkFlags .. ' /MT'	-- /MD
+		elseif build == 'release' then
+			linkFlags = linkFlags .. ' /MTd'	-- /MDd
+		end
+	end
+	MSVCWindows.super.postConfig(self)
 end
 
 function MSVCWindows:mkdir(fn)
 	exec('mkdir "'..fn:gsub('/','\\')..'"', false)
 end
 
-local env
-if io.readproc('uname'):trim():lower() == 'linux' then
-	env = GCCLinux()
-else
-	--env = MinGW()
-	env = MSVCWindows()
+function MSVCWindows:buildDist(dist, objs)
+	assert(#libpaths == 0, "can't link to libpaths with windows")
+	assert(#libs == 0, "can't link to libs with windows") 
+	local distdir = io.getfiledir(dist)
+	if distType == 'lib' then
+		linkFlags = linkFlags .. ' /dll'
+	end
+
+	local distbase = distdir..'/'..distName
+	local deffile = distbase..'.def'
+	local dllfile = dist 
+	local dllWrappingLibFile = dllfile..'.lib'
+	local libfile = distbase..'.lib'
+
+	-- create the dll
+
+	if distType == 'app' then
+		MSVCWindows.super.buildDist(self, dist, objs)
+	elseif distType == 'lib' then
+		print('building '..dist..' from '..objs:concat' ')	
+		local distdir = io.getfiledir(dist)
+		self:mkdir(distdir)
+	
+		exec(table{
+			'lib.exe',
+			'/out:'..libfile,
+		}:append(objs):concat' ')
+
+		pcall(function()
+			exec(table{
+				'link.exe',
+				'/dll',
+				'/out:'..dllfile,
+			}:append(objs):concat' ')
+		
+			exec(table{
+				'dumpbin.exe',
+				'/exports',
+				dllfile,
+				'>',
+				deffile
+			}:concat' ')
+		
+			exec(table{
+				'lib.exe',
+				'/def:'..deffile,
+				'/out:'..dllWrappingLibFile,
+			}:append(objs):concat' ')
+		end)
+	end
 end
 
-for _,_build in ipairs{'debug', 'release'} do
-	build = _build
-	print('building '..build)	
-	
-	distName = nil
-	distType = nil
-	depends = table()
-	
-	cppver = 'c++11'
 
-	env:preConfig()
 
-	assert(loadfile('buildinfo', 'bt', _G))()
-	assert(distName)
-	assert(distType)
+local env
+local detect = require 'make.detect'()
+if detect == 'gcc-linux' then
+	env = GCCLinux()
+elseif detect == 'msvc-windows' then
+	env = MSVCWindows()
+elseif detect == 'mingw-windows' then
+	env = MinGW()
+else
+	error("unknown environment: "..detect)
+end
+print("using environment: "..detect)
 
-	for _,dependDir in ipairs(depends) do
-		local push_distName = distName
-		local push_distType = distType
-		local push_depends = depends
-		local push_macros = macros
-
+local function doBuild(buildTypes)
+	for _,_build in ipairs(buildTypes or {'debug', 'release'}) do
+		build = _build
+		print('building '..build)	
+		
 		distName = nil
 		distType = nil
-		depend = nil
 		depends = table()
-
-		macros = table{
-			'PLATFORM_'..platform,
-			'BUILD_'..build,
-		}
-		if build == 'debug' then macros:insert'DEBUG' end
-		if build == 'release' then macros:insert'NDEBUG' end
-	
-		assert(loadfile(dependDir..'/buildinfo', 'bt', _G))()
-		local dependName = distName	
-		assert(distType == 'lib' or distType == 'inc')	--otherwise why are we dependent on it?
-		include:insert(dependDir..'/include')
-		if distType == 'lib' and push_distType == 'app' then
-			dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..libPrefix..dependName..libSuffix)
-		end
-		if depend then depend(dependDir) end
 		
-		distName = push_distName
-		distType = push_distType
-		depends = push_depends
-		macros = push_macros
-	end
+		cppver = 'c++11'
 
-	env:postConfig()
-	
-	-- determine source files
-	local srcs = find('src', '%.cpp$')
-	if #srcs == 0 then
-		print'no input files found'
-	else
-		local objs = srcs:map(function(f)
-			f = f:gsub('^src/', 'obj/')
-			f = f:gsub('%.cpp$', objSuffix)
-			return f
-		end)
-		local headers = find('include')	-- TODO find alll include
+		env:preConfig()
 
-		for i,obj in ipairs(objs) do
-			local src = srcs[i]
-			env:buildObj(obj, src)
+		assert(loadfile('buildinfo', 'bt', _G))()
+		assert(distName)
+		assert(distType)
+
+		for _,dependDir in ipairs(depends) do
+			local push_distName = distName
+			local push_distType = distType
+			local push_depends = depends
+			local push_macros = macros
+
+			distName = nil
+			distType = nil
+			depend = nil
+			depends = table()
+
+			macros = table{
+				'PLATFORM_'..platform,
+				'BUILD_'..build,
+			}
+			if build == 'debug' then macros:insert'DEBUG' end
+			if build == 'release' then macros:insert'NDEBUG' end
+		
+			assert(loadfile(dependDir..'/buildinfo', 'bt', _G))()
+			local dependName = distName	
+			assert(distType == 'lib' or distType == 'inc')	--otherwise why are we dependent on it?
+			include:insert(dependDir..'/include')
+			if distType == 'lib' and push_distType == 'app' then
+				if env:isa(GCCLinux) then
+					-- [[ using lib and libpaths ...
+					libs:insert(dependName)
+					libpaths:insert(dependDir..'/dist/'..platform..'/'..build)
+					--]]
+				else
+					-- [[ using dynamic libs ...
+					if env:isa(MSVCWindows) then
+						dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..dependName..'.lib')
+					else
+						dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..libPrefix..dependName..libSuffix)
+					end
+					--]]
+				end
+			end
+			if depend then depend(dependDir) end
+			
+			distName = push_distName
+			distType = push_distType
+			depends = push_depends
+			macros = push_macros
 		end
 
-		local distPrefix = distType == 'lib' and libPrefix or ''
-		local distSuffix = distType == 'lib' and libSuffix or ''
-		local distdir = 'dist/'..platform..'/'..build
-		local dist = distdir..'/'..distPrefix..distName..distSuffix
+		env:postConfig()
+		
+		-- determine source files
+		local srcs = find('src', '%.cpp$')
+		if #srcs == 0 then
+			print'no input files found'
+		else
+			local objs = srcs:map(function(f)
+				f = f:gsub('^src/', 'obj/'..platform..'/'..build..'/')
+				f = f:gsub('%.cpp$', objSuffix)
+				return f
+			end)
+			local headers = find('include')	-- TODO find alll include
 
-		env:buildDist(dist, objs)
+			for i,obj in ipairs(objs) do
+				local src = srcs[i]
+				env:buildObj(obj, src)
+			end
+
+			local distPrefix = distType == 'lib' and libPrefix or ''
+			local distSuffix = distType == 'lib' and libSuffix or appSuffix
+			local distdir = 'dist/'..platform..'/'..build
+			local dist = distdir..'/'..distPrefix..distName..distSuffix
+
+			env:buildDist(dist, objs)
+		end
 	end
 end
 
--- explicitly exit so lua -lmake won't open a prompt
-os.exit()
+local function clean()
+	exec('rm -fr obj')
+end
+
+local function distclean()
+	exec('rm -fr dist')
+end
+
+local cmds = {...}
+if #cmds == 0 then cmds = {'all'} end
+for _,cmd in ipairs(cmds) do
+	if cmd == 'all' then
+		doBuild()
+	elseif cmd == 'debug' or cmd == 'release' then
+		doBuild{cmd}
+	elseif cmd == 'clean' then
+		clean()
+	elseif cmd == 'distclean' then	
+		distclean()
+	else
+		error('unknown command: '..cmd)
+	end
+end

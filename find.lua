@@ -2,10 +2,8 @@ local table = require 'ext.table'
 local io = require 'ext.io'
 
 local function rfind(dir, pattern, results)
-	--for f in lfs.dir(dir) do
 	for f in file[dir]() do
 		local path = dir..'/'..f
-		local attr = lfs.attributes(path)
 		if io.isdir(path) then
 			rfind(path, pattern, results)
 		else
