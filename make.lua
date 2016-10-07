@@ -9,7 +9,7 @@ require 'ext'
 
 local find = require 'make.find'
 local function exec(cmd, must)
-	print(cmd)
+	print('>> '..cmd)
 	if must or must == nil then 
 		assert(os.execute(cmd))
 	else
@@ -17,15 +17,20 @@ local function exec(cmd, must)
 	end
 end
 
-local Env = class()
-
-function Env:preConfig()
+local function resetMacros()
 	macros = table{
 		'PLATFORM_'..platform,
 		'BUILD_'..build,
 	}
 	if build == 'debug' then macros:insert'DEBUG' end
 	if build == 'release' then macros:insert'NDEBUG' end
+end
+
+local Env = class()
+
+function Env:preConfig()
+	resetMacros()
+
 	pthread = false
 	include = table{'include'} 
 	libpaths = table()
@@ -38,6 +43,10 @@ end
 
 function Env:mkdir(fn)
 	exec('mkdir -p '..fn, false)
+end
+
+function Env:addDependLib(dependName, dependDir)
+	dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..libPrefix..dependName..libSuffix)
 end
 
 function Env:buildObj(obj, src)
@@ -114,20 +123,33 @@ function GCC:postConfig()
 	GCC.super.postConfig(self)
 end
 
-local GCCLinux = class(GCC)
+local Linux = class(GCC)
 
-function GCCLinux:preConfig()
+function Linux:preConfig()
 	platform = 'linux'
-	GCCLinux.super.preConfig(self)
+	Linux.super.preConfig(self)
 end
 
-function GCCLinux:buildDist(...)
-	GCCLinux.super.buildDist(self, ...)
-	
-	local distdir = io.getfiledir(dist)
-	self:mkdir(distdir..'/lib')
-	-- TODO copy all libs into distdir/lib
-	-- and make sure their rpath is correct
+function Linux:buildDist(dist, objs)
+	Linux.super.buildDist(self, dist, objs)
+
+	if distType == 'app' then
+		local distdir = io.getfiledir(dist)
+		self:mkdir(distdir..'/lib')
+		-- TODO copy all libs into distdir/lib
+		-- and make sure their rpath is correct
+		-- or go the windows route and just static link everything
+	end
+end
+
+function Linux:addDependLib(dependName, dependDir)
+	--[[ using -l and -L
+	libs:insert(dependName)
+	libpaths:insert(dependDir..'/dist/'..platform..'/'..build)
+	--]]
+	-- [[ adding the .so
+	dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..libPrefix..dependName..libSuffix)
+	--]]
 end
 
 local MinGW = class(GCC)
@@ -141,9 +163,9 @@ function MinGW:mkdir(fn)
 	exec('C:\\MinGW\\msys\\1.0\\bin\\mkdir.exe -p '..fn, false)
 end
 
-local MSVCWindows = class(Env)
+local MSVC = class(Env)
 
-function MSVCWindows:preConfig()
+function MSVC:preConfig()
 	platform = 'msvc'
 	objSuffix = '.obj'
 	libPrefix = ''
@@ -160,95 +182,117 @@ function MSVCWindows:preConfig()
 	compileOutputFlag = '/Fo:'
 	compileIncludeFlag = '/I'
 	compileMacroFlag = '/D'
-	linker = 'cl.exe'
+	linker = 'link.exe'
 	linkLibPathFlag = ''
 	linkLibFlag = ''
-	linkFlags = ''
-	linkOutputFlag = '/Fe: '
-	MSVCWindows.super.preConfig(self)
+	linkFlags = '/nologo'
+	linkOutputFlag = '/out:'
+	MSVC.super.preConfig(self)
 end
 
-function MSVCWindows:postConfig()
-	if distType == 'lib' then
-		if build == 'debug' then
-			linkFlags = linkFlags .. ' /LDd'
-		elseif build == 'release' then
-			linkFlags = linkFlags .. ' /LD'
-		end
-	elseif distType == 'app' then
-		if build == 'debug' then
-			linkFlags = linkFlags .. ' /MT'	-- /MD
-		elseif build == 'release' then
-			linkFlags = linkFlags .. ' /MTd'	-- /MDd
-		end
+function MSVC:postConfig()
+	if build == 'debug' then
+		compileFlags = compileFlags .. ' /MD'	-- /MT
+	elseif build == 'release' then
+		compileFlags = compileFlags .. ' /MDd'	-- /MTd
 	end
-	MSVCWindows.super.postConfig(self)
+	if build == 'debug' then
+		linkFlags = linkFlags .. ' /debug'
+	end
+
+	if distType == 'app' then
+		linkFlags = linkFlags .. ' /subsystem:console'
+	end
+	
+	MSVC.super.postConfig(self)
 end
 
-function MSVCWindows:mkdir(fn)
+function MSVC:addDependLib(dependName, dependDir)
+	-- [[ do this if you want all libs to be staticly linked 
+	dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..dependName..'-static.lib')
+	--]]
+end
+
+function MSVC:mkdir(fn)
 	exec('mkdir "'..fn:gsub('/','\\')..'"', false)
 end
 
-function MSVCWindows:buildDist(dist, objs)
+function MSVC:buildDist(dist, objs)
+	-- technically you can ... but I am avoiding these for now
 	assert(#libpaths == 0, "can't link to libpaths with windows")
 	assert(#libs == 0, "can't link to libs with windows") 
+	
 	local distdir = io.getfiledir(dist)
 	if distType == 'lib' then
 		linkFlags = linkFlags .. ' /dll'
 	end
 
 	local distbase = distdir..'/'..distName
-	local deffile = distbase..'.def'
 	local dllfile = dist 
-	local dllWrappingLibFile = dllfile..'.lib'
-	local libfile = distbase..'.lib'
-
-	-- create the dll
+	local dllLibFile = distbase..'.lib'
+	local staticLibFile = distbase..'-static.lib'
+--	local deffile = distbase..'.def'
 
 	if distType == 'app' then
-		MSVCWindows.super.buildDist(self, dist, objs)
+		MSVC.super.buildDist(self, dist, objs)
 	elseif distType == 'lib' then
 		print('building '..dist..' from '..objs:concat' ')	
 		local distdir = io.getfiledir(dist)
 		self:mkdir(distdir)
-	
+
+		-- build the static lib
+		-- static libs don't need all the pieces until they are linked to an .exe
+		-- so don't bother with libs, libpaths, dynamicLibs
 		exec(table{
 			'lib.exe',
-			'/out:'..libfile,
+			'/nologo /nodefaultlib',
+			'/out:'..staticLibFile,
 		}:append(objs):concat' ')
 
-		pcall(function()
-			exec(table{
-				'link.exe',
-				'/dll',
-				'/out:'..dllfile,
-			}:append(objs):concat' ')
-		
-			exec(table{
-				'dumpbin.exe',
-				'/exports',
-				dllfile,
-				'>',
-				deffile
-			}:concat' ')
-		
-			exec(table{
-				'lib.exe',
-				'/def:'..deffile,
-				'/out:'..dllWrappingLibFile,
-			}:append(objs):concat' ')
-		end)
+--[=[ building DLLs:
+		exec(table{
+			'link.exe',
+			'/dll',
+			'/out:'..dllfile,
+		}
+		--:append(libpaths:map(function(libpath) return '/libpath:'..libpath end))
+		--:append(libs:map(function(lib) return lib end))
+		:append(dynamicLibs)
+		:append(objs)
+		:concat' ')
+
+--[[
+		exec(table{
+			'dumpbin.exe',
+			'/nologo /exports',
+			dllfile,
+			'>',
+			deffile
+		}:concat' ')
+--]]
+
+		exec(table{
+			'lib.exe',
+			'/nologo /nodefaultlib',
+--			'/def:'..deffile,
+			'/out:'..dllLibFile,
+		}:append(objs):concat' ')
+--]=]
+	
+	end
+
+	if io.fileexists'vc140.pdb' then
+		exec('del vc140.pdb', false)
 	end
 end
-
 
 
 local env
 local detect = require 'make.detect'()
 if detect == 'gcc-linux' then
-	env = GCCLinux()
+	env = Linux()
 elseif detect == 'msvc-windows' then
-	env = MSVCWindows()
+	env = MSVC()
 elseif detect == 'mingw-windows' then
 	env = MinGW()
 else
@@ -256,8 +300,37 @@ else
 end
 print("using environment: "..detect)
 
-local function doBuild(buildTypes)
-	for _,_build in ipairs(buildTypes or {'debug', 'release'}) do
+local lfs
+do
+	local found
+	found, lfs = pcall(require, 'lfs')
+	if not found then 
+		print("can't find lfs -- can't determine last file modification time -- rebuilding all")
+		lfs = nil 
+	end
+end
+
+local function needsUpdate(target, depends)
+	if not lfs then return true end
+	if not io.fileexists(target) then return true end
+	
+	local targetAttr = lfs.attributes(target)
+	if not targetAttr then return true end
+	
+	for _,depend in ipairs(depends) do
+		local dependAttr = assert(lfs.attributes(depend))
+		if targetAttr.change < dependAttr.change then
+			return true
+		end
+	end
+	
+	print('target up-to-date: '..target)
+	return false
+end
+
+local function doBuild(args)
+	args = args or {}
+	for _,_build in ipairs(args.buildTypes or {'debug', 'release'}) do
 		build = _build
 		print('building '..build)	
 		
@@ -268,12 +341,14 @@ local function doBuild(buildTypes)
 		cppver = 'c++11'
 
 		env:preConfig()
-
+		
+		cwd = '.'
 		assert(loadfile('buildinfo', 'bt', _G))()
 		assert(distName)
 		assert(distType)
 
 		for _,dependDir in ipairs(depends) do
+			cwd = dependDir
 			local push_distName = distName
 			local push_distType = distType
 			local push_depends = depends
@@ -281,42 +356,26 @@ local function doBuild(buildTypes)
 
 			distName = nil
 			distType = nil
-			depend = nil
 			depends = table()
+			including = true
 
-			macros = table{
-				'PLATFORM_'..platform,
-				'BUILD_'..build,
-			}
-			if build == 'debug' then macros:insert'DEBUG' end
-			if build == 'release' then macros:insert'NDEBUG' end
-		
-			assert(loadfile(dependDir..'/buildinfo', 'bt', _G))()
+			resetMacros()
+
+			assert(loadfile(cwd..'/buildinfo', 'bt', _G))()
 			local dependName = distName	
 			assert(distType == 'lib' or distType == 'inc')	--otherwise why are we dependent on it?
-			include:insert(dependDir..'/include')
-			if distType == 'lib' and push_distType == 'app' then
-				if env:isa(GCCLinux) then
-					-- [[ using lib and libpaths ...
-					libs:insert(dependName)
-					libpaths:insert(dependDir..'/dist/'..platform..'/'..build)
-					--]]
-				else
-					-- [[ using dynamic libs ...
-					if env:isa(MSVCWindows) then
-						dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..dependName..'.lib')
-					else
-						dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..libPrefix..dependName..libSuffix)
-					end
-					--]]
-				end
+			include:insert(cwd..'/include')
+			if (platform ~= 'msvc' and distType == 'lib' and push_distType == 'app')
+			or (platform == 'msvc' and distType ~= 'inc')
+			then
+				env:addDependLib(dependName, cwd)
 			end
-			if depend then depend(dependDir) end
 			
 			distName = push_distName
 			distType = push_distType
 			depends = push_depends
 			macros = push_macros
+			including = nil
 		end
 
 		env:postConfig()
@@ -333,9 +392,19 @@ local function doBuild(buildTypes)
 			end)
 			local headers = find('include')	-- TODO find alll include
 
-			for i,obj in ipairs(objs) do
-				local src = srcs[i]
-				env:buildObj(obj, src)
+			if not args.distonly then
+				for i,obj in ipairs(objs) do
+					local src = srcs[i]			
+					
+					-- if the source file has been modified since the obj was created
+					-- *or* the dependent headers have been modified since the obj was created
+					-- *or* the buildinfo has been modified since the obj was created
+					-- then rebuild
+					-- (otherwise you can skip this build)
+					if needsUpdate(obj, {src}) then
+						env:buildObj(obj, src)
+					end
+				end
 			end
 
 			local distPrefix = distType == 'lib' and libPrefix or ''
@@ -362,11 +431,13 @@ for _,cmd in ipairs(cmds) do
 	if cmd == 'all' then
 		doBuild()
 	elseif cmd == 'debug' or cmd == 'release' then
-		doBuild{cmd}
+		doBuild{buildTypes={cmd}}
 	elseif cmd == 'clean' then
 		clean()
 	elseif cmd == 'distclean' then	
 		distclean()
+	elseif cmd == 'distonly' then
+		doBuild{distonly=true}
 	else
 		error('unknown command: '..cmd)
 	end
