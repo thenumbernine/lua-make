@@ -10,3 +10,11 @@ Hence this simple build system.
 It reads files labeled 'buildinfo'
 Each buildinfo specifies the distribution name, type, and any dependencies.
 They optionally can have a depend() function that sets up any other dependencies needed for projects that depend on them.
+
+usage:
+
+if you're lazy:
+	lua -lmake
+
+if you really want to do stuff:
+	lua /path/to/lua/make/run.lua clean distclean all
