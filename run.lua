@@ -365,7 +365,7 @@ local function doBuild(args)
 			local dependName = distName	
 			assert(distType == 'lib' or distType == 'inc')	--otherwise why are we dependent on it?
 			include:insert(cwd..'/include')
-			if (platform ~= 'msvc' and distType == 'lib' and push_distType == 'app')
+			if (platform ~= 'msvc' and distType == 'lib')--and push_distType == 'app')
 			or (platform == 'msvc' and distType ~= 'inc')
 			then
 				env:addDependLib(dependName, cwd)
