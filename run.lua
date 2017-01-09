@@ -8,7 +8,9 @@ cmd is: build debug release clean distclean
 require 'ext'
 
 local find = require 'make.find'
-local function exec(cmd, must)
+
+-- not 'local' so the buildinfo script can see it (esp for postBuildDist() )
+function exec(cmd, must)
 	print('>> '..cmd)
 	if must or must == nil then 
 		assert(os.execute(cmd))
@@ -35,6 +37,7 @@ function Env:preConfig()
 	include = table{'include'} 
 	libpaths = table()
 	libs = table()
+	dependLibs = table()
 	dynamicLibs = table()
 end
 
@@ -79,8 +82,7 @@ function Env:buildDist(dist, objs)
 		:append(libs:map(function(lib) return linkLibFlag..lib end))
 		:append(dynamicLibs)
 		:append{linkOutputFlag..dist}
-		:concat' '
-	)
+		:concat' ', true)
 end
 
 local GCC = class(Env)
@@ -134,11 +136,24 @@ function Linux:buildDist(dist, objs)
 	Linux.super.buildDist(self, dist, objs)
 
 	if distType == 'app' then
-		local distdir = io.getfiledir(dist)
-		self:mkdir(distdir..'/lib')
+		--[[
 		-- TODO copy all libs into distdir/lib
 		-- and make sure their rpath is correct
 		-- or go the windows route and just static link everything
+		local distdir = io.getfiledir(dist)
+		self:mkdir(distdir..'/lib')
+		for _,src in ipairs(dependLibs) do
+			local _, name = io.getfiledir(src)
+			local dst = 'dist/'..platform..'/'..build..'/lib/'..name
+			print('copying from '..src..' to '..dst)
+			exec('cp '..src..' '..dst)
+		end
+		--]]
+		-- [[ copy res/ folder into the dist folder
+		if io.fileexists'res' then
+			exec('cp -R res/* dist/'..platform..'/'..build, true)
+		end
+		--]]
 	end
 end
 
@@ -150,6 +165,7 @@ function Linux:addDependLib(dependName, dependDir)
 	-- [[ adding the .so
 	dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..libPrefix..dependName..libSuffix)
 	--]]
+	dependLibs:insert(dynamicLibs:last())
 end
 
 local MinGW = class(GCC)
@@ -247,7 +263,7 @@ function MSVC:buildDist(dist, objs)
 			'lib.exe',
 			'/nologo /nodefaultlib',
 			'/out:'..staticLibFile,
-		}:append(objs):concat' ')
+		}:append(objs):concat' ', true)
 
 --[=[ building DLLs:
 		exec(table{
@@ -259,7 +275,7 @@ function MSVC:buildDist(dist, objs)
 		--:append(libs:map(function(lib) return lib end))
 		:append(dynamicLibs)
 		:append(objs)
-		:concat' ')
+		:concat' ', true)
 
 --[[
 		exec(table{
@@ -268,7 +284,7 @@ function MSVC:buildDist(dist, objs)
 			dllfile,
 			'>',
 			deffile
-		}:concat' ')
+		}:concat' ', true)
 --]]
 
 		exec(table{
@@ -276,7 +292,7 @@ function MSVC:buildDist(dist, objs)
 			'/nologo /nodefaultlib',
 --			'/def:'..deffile,
 			'/out:'..dllLibFile,
-		}:append(objs):concat' ')
+		}:append(objs):concat' ', true)
 --]=]
 	
 	end
@@ -413,6 +429,11 @@ local function doBuild(args)
 			local dist = distdir..'/'..distPrefix..distName..distSuffix
 
 			env:buildDist(dist, objs)
+	
+			-- if postBuildDist is defined then do that too
+			if postBuildDist then
+				postBuildDist()
+			end
 		end
 	end
 end
