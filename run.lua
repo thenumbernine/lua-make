@@ -1,4 +1,4 @@
-#!/usr/bin/env lua -lluarocks.require
+#!/usr/bin/env lua
 --[[
 lua make.lua [cmd]
 reads buildinfo
