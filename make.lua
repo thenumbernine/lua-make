@@ -1,3 +1,9 @@
 --shortcut for -lmake
-dofile('/home/chris/Projects/lua/make/run.lua')
-os.exit()
+if os.getenv'HOME' then
+	dofile(os.getenv'HOME'..'/Projects/lua/make/run.lua')
+	os.exit()
+end
+if os.getenv'USERPROFILE' then
+	dofile(os.getenv'USERPROFILE'..[[\Projects\lua\make\run.lua]])
+	os.exit()
+end
