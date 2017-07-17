@@ -97,6 +97,10 @@ function Env:getDist()
 	return dist
 end
 
+function Env:getResourcePath(dist)
+	return 'dist/'..platform..'/'..build
+end
+
 local GCC = class(Env)
 
 function GCC:preConfig()
@@ -166,7 +170,7 @@ function Linux:buildDist(dist, objs)
 		--]]
 		-- [[ copy res/ folder into the dist folder
 		if io.fileexists'res' then
-			exec('cp -R res/* dist/'..platform..'/'..build, true)
+			exec('cp -R res/* '..self:getResourcePath(dist), true)
 		end
 		--]]
 	end
@@ -283,14 +287,14 @@ function OSX:buildDist(dist, objs)
 	end
 end
 
-function Linux:addDependLib(dependName, dependDir)
-	--[[ using -l and -L
-	libs:insert(dependName)
-	libpaths:insert(dependDir..'/dist/'..platform..'/'..build)
-	--]]
-	-- [[ adding the .so
+function OSX:getResourcePath(dist)
+	local distdir = io.getfiledir(dist)
+	return distdir..'/../Resources'
+end
+
+function OSX:addDependLib(dependName, dependDir)
+	-- same as linux:
 	dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..libPrefix..dependName..libSuffix)
-	--]]
 	dependLibs:insert(dynamicLibs:last())
 end
 
@@ -562,7 +566,7 @@ os.exit()
 	
 			-- if postBuildDist is defined then do that too
 			if postBuildDist then
-				postBuildDist()
+				postBuildDist(env:getResourcePath(dist))
 			end
 		end
 	end
