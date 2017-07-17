@@ -9,6 +9,8 @@ local function detect()
 			-- gcc.exe (GCC) 5.3.0
 			return 'mingw-windows'
 		end
+	elseif uname == 'darwin' then
+		return 'osx'
 	end
 end
 

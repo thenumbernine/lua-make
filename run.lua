@@ -71,6 +71,10 @@ function Env:buildObj(obj, src)
 	)
 end
 
+function Env:getDistSuffix()
+	return distType == 'lib' and libSuffix or appSuffix
+end
+
 function Env:buildDist(dist, objs)
 	print('building '..dist..' from '..objs:concat' ')	
 	local distdir = io.getfiledir(dist)
@@ -83,6 +87,14 @@ function Env:buildDist(dist, objs)
 		:append(dynamicLibs)
 		:append{linkOutputFlag..dist}
 		:concat' ', true)
+end
+
+function Env:getDist()
+	local distPrefix = distType == 'lib' and libPrefix or ''
+	local distSuffix = self:getDistSuffix(distPrefix)
+	local distdir = 'dist/'..platform..'/'..build
+	local dist = distdir..'/'..distPrefix..distName..distSuffix
+	return dist
 end
 
 local GCC = class(Env)
@@ -112,15 +124,18 @@ end
 
 function GCC:postConfig()
 	compileFlags = compileFlags .. ' -std='..cppver
-	if distType == 'lib' then
-		linkFlags = linkFlags .. ' -shared'
-	end
-	if pthread then
-		compileFlags = compileFlags .. ' -pthread'
-		linkFlags = linkFlags .. ' -pthread'
-	end
-	if distType == 'app' then
-		linkFlags = linkFlags .. ' -Wl,-rpath=lib'
+	-- really this is Linux and MinGW specific
+	if platform ~= 'osx' then
+		if distType == 'lib' then
+			linkFlags = linkFlags .. ' -shared'
+		end
+		if pthread then
+			compileFlags = compileFlags .. ' -pthread'
+			linkFlags = linkFlags .. ' -pthread'
+		end
+		if distType == 'app' then
+			linkFlags = linkFlags .. ' -Wl,-rpath=lib'
+		end
 	end
 	GCC.super.postConfig(self)
 end
@@ -154,6 +169,117 @@ function Linux:buildDist(dist, objs)
 			exec('cp -R res/* dist/'..platform..'/'..build, true)
 		end
 		--]]
+	end
+end
+
+function Linux:addDependLib(dependName, dependDir)
+	--[[ using -l and -L
+	libs:insert(dependName)
+	libpaths:insert(dependDir..'/dist/'..platform..'/'..build)
+	--]]
+	-- [[ adding the .so
+	dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..libPrefix..dependName..libSuffix)
+	--]]
+	dependLibs:insert(dynamicLibs:last())
+end
+
+local OSX = class(GCC)
+
+function OSX:preConfig()
+	platform = 'osx'
+	OSX.super.preConfig(self)
+	compiler = 'clang++'
+	linker = 'clang++'
+	libSuffix = '.dylib'
+end
+
+function OSX:postConfig()
+
+	local dist = self:getDist()
+	local _, distname = io.getfiledir(dist)
+	if distType == 'lib' then	
+		linkFlags = linkFlags .. ' -dynamiclib -undefined suppress -flat_namespace -install_name @rpath/'..distname
+	end
+	if distType == 'app' then
+		linkFlags = linkFlags .. ' -Wl,-headerpad_max_install_names'
+	end
+
+	-- TODO always use home?  always use /usr/local?
+	--  how to let the user specify?
+	include:insert(os.getenv'HOME'..'/include')
+	
+	if build == 'debug' then
+		compileFlags = compileFlags .. ' -mfix-and-continue'
+	end
+	OSX.super.postConfig(self)
+end
+
+function OSX:getDistSuffix(distPrefix)
+	return (distType == 'app'
+		and '.app/Contents/MacOS/'..distPrefix..distName
+		or '') .. OSX.super.getDistSuffix(self)
+end
+
+local template = require 'template'
+function OSX:buildDist(dist, objs)
+	OSX.super.buildDist(self, dist, objs)
+	if distType == 'app' then
+		local distdir, distname = io.getfiledir(dist)
+		file[distdir..'/../PkgInfo'] = 'APPLhect'
+		file[distdir..'/../Info.plist'] = template([[
+<?='<'..'?'?>xml version="1.0" encoding="UTF-8"<?='?'..'>'?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string><?=distname?></string>
+	<key>CFBundleIdentifier</key>
+	<string>net.christopheremoore.<?=distname?></string>
+	<key>CFBundleVersion</key>
+	<string>1.0</string>
+	<key>CFBundleIconFile</key>
+	<string>Icons</string>
+
+	<key>CFBundleDevelopmentRegion</key>
+	<string>English</string>
+	<key>CFBundleDocumentTypes</key>
+	<array/>
+	<key>CFBundleExecutable</key>
+	<string><?=distname?></string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>1.0</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleSignature</key>
+	<string>hect</string>
+	<key>NSMainNibFile</key>
+	<string>MainMenu</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+
+</dict>
+</plist>
+]], {distname=distname})
+
+		local resDir = distdir..'/../Resources'
+		local resLibDir = resDir..'/lib'
+		self:mkdir(resLibDir)
+	
+		-- copy over Resources
+		if io.fileexists'res' then
+			exec('cp -R res/* '..resDir)
+		end
+
+		-- copy all libs into distdir/lib
+		-- and make sure their rpath is correct
+		for _,src in ipairs(dynamicLibs) do
+			local _, name = io.getfiledir(src)
+			local dst = resLibDir..'/'..name
+			print('copying from '..src..' to '..dst)
+			exec('cp '..src..' '..dst)
+			exec('install_name_tool -change '..src..' \\@executable_path/../Resources/lib/'..name..' '..dist)
+			exec('install_name_tool -change \\@rpath/'..name..' \\@executable_path/../Resources/lib/'..name..' '..dist)
+		end
 	end
 end
 
@@ -311,6 +437,8 @@ elseif detect == 'msvc-windows' then
 	env = MSVC()
 elseif detect == 'mingw-windows' then
 	env = MinGW()
+elseif detect == 'osx' then
+	env = OSX()
 else
 	error("unknown environment: "..detect)
 end
@@ -423,11 +551,13 @@ local function doBuild(args)
 				end
 			end
 
-			local distPrefix = distType == 'lib' and libPrefix or ''
-			local distSuffix = distType == 'lib' and libSuffix or appSuffix
-			local distdir = 'dist/'..platform..'/'..build
-			local dist = distdir..'/'..distPrefix..distName..distSuffix
-
+			local dist = env:getDist()
+--[[
+print('distSuffix', distSuffix)
+print('distdir', distdir)
+print('dist', dist)
+os.exit()
+--]]			
 			env:buildDist(dist, objs)
 	
 			-- if postBuildDist is defined then do that too
