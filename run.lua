@@ -500,29 +500,33 @@ local function doBuild(args)
 			local push_distName = distName
 			local push_distType = distType
 			local push_depends = depends
-			local push_macros = macros
+			-- hmm, I should think this system through more ...
+			-- in order to allow include buildinfos to modify state (and include things like macros, search paths, etc)
+			-- I shouldn't be pushing/popping them
+			-- but instead, check 'including' to see if a variable should be modified ...
+			--local push_macros = macros
 
 			distName = nil
 			distType = nil
 			depends = table()
 			including = true
-
-			resetMacros()
+			--resetMacros()
 
 			assert(loadfile(cwd..'/buildinfo', 'bt', _G))()
 			local dependName = distName	
 			assert(distType == 'lib' or distType == 'inc')	--otherwise why are we dependent on it?
 			include:insert(cwd..'/include')
-			if (platform ~= 'msvc' and distType == 'lib')--and push_distType == 'app')
+			if (platform == 'linux' and distType == 'lib' and push_distType == 'app')
+			or (platform == 'osx' and distType == 'lib')
 			or (platform == 'msvc' and distType ~= 'inc')
 			then
 				env:addDependLib(dependName, cwd)
 			end
 			
+			--macros = push_macros
 			distName = push_distName
 			distType = push_distType
 			depends = push_depends
-			macros = push_macros
 			including = nil
 		end
 
