@@ -2,7 +2,9 @@ local function detect()
 	local uname = io.popen'uname':read'*l':lower()
 	if uname == 'linux' then
 		return 'gcc-linux'
-	elseif uname == 'msys_nt-10.0' then
+	elseif uname:sub(1,5) == 'mingw'
+	or uname:sub(1,4) == 'msys' 
+	then
 		if io.popen'cl.exe':read'*l' then
 			return 'msvc-windows'
 		elseif io.popen'gcc.exe --version':read'*l' then
