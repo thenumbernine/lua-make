@@ -375,18 +375,18 @@ function MSVC:buildDist(dist, objs)
 
 	local distbase = distdir..'/'..distName
 	local dllfile = dist 
-	local dllLibFile = distbase..'.lib'
+	local dllLibFile = distbase..'.dll'
 	local staticLibFile = distbase..'-static.lib'
 --	local deffile = distbase..'.def'
 
 	if distType == 'app' then
 		MSVC.super.buildDist(self, dist, objs)
 	elseif distType == 'lib' then
-		print('building '..dist..' from '..objs:concat' ')	
+		print('building '..dist..' from '..objs:concat' ')
 		local distdir = io.getfiledir(dist)
 		self:mkdir(distdir)
 
-		-- build the static lib
+-- [=[	-- build the static lib
 		-- static libs don't need all the pieces until they are linked to an .exe
 		-- so don't bother with libs, libpaths, dynamicLibs
 		exec(table{
@@ -394,6 +394,7 @@ function MSVC:buildDist(dist, objs)
 			'/nologo /nodefaultlib',
 			'/out:'..staticLibFile,
 		}:append(objs):concat' ', true)
+--]=]
 
 --[=[ building DLLs:
 		exec(table{
