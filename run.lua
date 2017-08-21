@@ -311,6 +311,14 @@ end
 
 local MSVC = class(Env)
 
+-- enable to make static libs, disable to make dlls
+-- should I make this a per-project option?
+-- should I make both?
+-- I'm going to only do static libs with MSVC
+-- this is because of their stupid dllimport/export crap
+-- which I don't want to mess all my code up for.
+MSVC.makeStatic = true
+
 function MSVC:preConfig()
 	platform = 'msvc'
 	objSuffix = '.obj'
@@ -334,6 +342,8 @@ function MSVC:preConfig()
 	linkFlags = '/nologo'
 	linkOutputFlag = '/out:'
 	MSVC.super.preConfig(self)
+	-- sometimes it works, sometimes it doesn't
+	--macros:insert'_USE_MATH_DEFINES'
 end
 
 function MSVC:postConfig()
@@ -355,7 +365,11 @@ end
 
 function MSVC:addDependLib(dependName, dependDir)
 	-- [[ do this if you want all libs to be staticly linked 
-	dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..dependName..'-static.lib')
+	if self.makeStatic then
+		dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..dependName..'-static.lib')
+	else
+		dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..dependName..'.lib')
+	end
 	--]]
 end
 
@@ -366,7 +380,6 @@ end
 function MSVC:buildDist(dist, objs)
 	-- technically you can ... but I am avoiding these for now
 	assert(#libpaths == 0, "can't link to libpaths with windows")
-	assert(#libs == 0, "can't link to libs with windows") 
 	
 	local distdir = io.getfiledir(dist)
 	if distType == 'lib' then
@@ -375,9 +388,6 @@ function MSVC:buildDist(dist, objs)
 
 	local distbase = distdir..'/'..distName
 	local dllfile = dist 
-	local dllLibFile = distbase..'.dll'
-	local staticLibFile = distbase..'-static.lib'
---	local deffile = distbase..'.def'
 
 	if distType == 'app' then
 		MSVC.super.buildDist(self, dist, objs)
@@ -386,46 +396,57 @@ function MSVC:buildDist(dist, objs)
 		local distdir = io.getfiledir(dist)
 		self:mkdir(distdir)
 
--- [=[	-- build the static lib
-		-- static libs don't need all the pieces until they are linked to an .exe
-		-- so don't bother with libs, libpaths, dynamicLibs
-		exec(table{
-			'lib.exe',
-			'/nologo /nodefaultlib',
-			'/out:'..staticLibFile,
-		}:append(objs):concat' ', true)
---]=]
+		if self.makeStatic then	-- [=[	-- build the static lib
+			local staticLibFile = distbase..'-static.lib'
+			-- static libs don't need all the pieces until they are linked to an .exe
+			-- so don't bother with libs, libpaths, dynamicLibs
+			exec(table{
+				'lib.exe',
+				'/nologo /nodefaultlib',
+				'/out:'..staticLibFile,
+			}:append(objs):concat' ', true)
+		else --]=]
+		-- [=[ building DLLs:
+			exec(table{
+				'link.exe',
+				'/dll',
+				'/out:'..dllfile,
+			}
+			--:append(libpaths:map(function(libpath) return '/libpath:'..libpath end))
+			--:append(libs:map(function(lib) return lib end))
+			:append(libs)
+--			:append(dynamicLibs)
+			:append(objs)
+			:concat' ', true)
 
---[=[ building DLLs:
-		exec(table{
-			'link.exe',
-			'/dll',
-			'/out:'..dllfile,
-		}
-		--:append(libpaths:map(function(libpath) return '/libpath:'..libpath end))
-		--:append(libs:map(function(lib) return lib end))
-		:append(dynamicLibs)
-		:append(objs)
-		:concat' ', true)
+-- [[
+			local defSrcFile = distbase..'.def.txt'
+			exec(table{
+				'dumpbin.exe',
+				'/nologo /exports',
+				dllfile,
+				'>',
+				defSrcFile
+			}:concat' ', true)
 
---[[
-		exec(table{
-			'dumpbin.exe',
-			'/nologo /exports',
-			dllfile,
-			'>',
-			deffile
-		}:concat' ', true)
+			local deffile = distbase..'.def'
+			file[deffile] = table{
+				'LIBRARY '..distName,
+				'EXPORTS',
+			}:concat'\n'
 --]]
 
-		exec(table{
-			'lib.exe',
-			'/nologo /nodefaultlib',
---			'/def:'..deffile,
+			local dllLibFile = distbase..'.lib'
+			exec(table{
+				'lib.exe',
+				'/nologo /nodefaultlib /machine:x64',
+			'/def:'..deffile,
 			'/out:'..dllLibFile,
-		}:append(objs):concat' ', true)
---]=]
-	
+			}
+--			:append(objs)
+			:concat' '
+			, true)
+		end --]=]
 	end
 
 	if io.fileexists'vc140.pdb' then
