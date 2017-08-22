@@ -101,6 +101,15 @@ function Env:getResourcePath(dist)
 	return 'dist/'..platform..'/'..build
 end
 
+function Env:clean()
+	exec'rm -fr obj'
+end
+
+function Env:distclean()
+	exec'rm -fr dist'
+end
+
+
 local GCC = class(Env)
 
 function GCC:preConfig()
@@ -462,6 +471,14 @@ function MSVC:buildDist(dist, objs)
 	end
 end
 
+function MSVC:clean()
+	exec'rmdir /s /q obj'
+end
+
+function MSVC:distclean()
+	exec'rmdir /s /q dist'
+end
+
 
 local env
 local detect = require 'make.detect'()
@@ -606,14 +623,6 @@ os.exit()
 	end
 end
 
-local function clean()
-	exec('rm -fr obj')
-end
-
-local function distclean()
-	exec('rm -fr dist')
-end
-
 local cmds = {...}
 if #cmds == 0 then cmds = {'all'} end
 for _,cmd in ipairs(cmds) do
@@ -622,9 +631,9 @@ for _,cmd in ipairs(cmds) do
 	elseif cmd == 'debug' or cmd == 'release' then
 		doBuild{buildTypes={cmd}}
 	elseif cmd == 'clean' then
-		clean()
+		env:clean()
 	elseif cmd == 'distclean' then	
-		distclean()
+		env:distclean()
 	elseif cmd == 'distonly' then
 		doBuild{distonly=true}
 	else
