@@ -317,7 +317,7 @@ local MSVC = class(Env)
 -- I'm going to only do static libs with MSVC
 -- this is because of their stupid dllimport/export crap
 -- which I don't want to mess all my code up for.
-MSVC.makeStatic = true
+MSVC.useStatic = true
 
 function MSVC:preConfig()
 	platform = 'msvc'
@@ -365,7 +365,7 @@ end
 
 function MSVC:addDependLib(dependName, dependDir)
 	-- [[ do this if you want all libs to be staticly linked 
-	if self.makeStatic then
+	if self.useStatic then
 		dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..dependName..'-static.lib')
 	else
 		dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..dependName..'.lib')
@@ -396,57 +396,59 @@ function MSVC:buildDist(dist, objs)
 		local distdir = io.getfiledir(dist)
 		self:mkdir(distdir)
 
-		if self.makeStatic then	-- [=[	-- build the static lib
-			local staticLibFile = distbase..'-static.lib'
-			-- static libs don't need all the pieces until they are linked to an .exe
-			-- so don't bother with libs, libpaths, dynamicLibs
-			exec(table{
-				'lib.exe',
-				'/nologo /nodefaultlib',
-				'/out:'..staticLibFile,
-			}:append(objs):concat' ', true)
-		else --]=]
+		-- [=[	-- build the static lib
+		local staticLibFile = distbase..'-static.lib'
+		-- static libs don't need all the pieces until they are linked to an .exe
+		-- so don't bother with libs, libpaths, dynamicLibs
+		exec(table{
+			'lib.exe',
+			'/nologo /nodefaultlib',
+			'/out:'..staticLibFile,
+		}:append(objs):concat' ', true)
+		--]=]
+		
 		-- [=[ building DLLs:
-			exec(table{
-				'link.exe',
-				'/dll',
-				'/out:'..dllfile,
-			}
-			--:append(libpaths:map(function(libpath) return '/libpath:'..libpath end))
-			--:append(libs:map(function(lib) return lib end))
-			:append(libs)
---			:append(dynamicLibs)
-			:append(objs)
-			:concat' ', true)
+		exec(table{
+			'link.exe',
+			'/dll',
+			'/out:'..dllfile,
+		}
+		--:append(libpaths:map(function(libpath) return '/libpath:'..libpath end))
+		--:append(libs:map(function(lib) return lib end))
+		:append(libs)
+--		:append(dynamicLibs)
+		:append(objs)
+		:concat' ', true)
 
--- [[
-			local defSrcFile = distbase..'.def.txt'
-			exec(table{
-				'dumpbin.exe',
-				'/nologo /exports',
-				dllfile,
-				'>',
-				defSrcFile
-			}:concat' ', true)
+		-- [[ 
+		local defSrcFile = distbase..'.def.txt'
+		exec(table{
+			'dumpbin.exe',
+			'/nologo /exports',
+			dllfile,
+			'>',
+			defSrcFile
+		}:concat' ', true)
 
-			local deffile = distbase..'.def'
-			file[deffile] = table{
-				'LIBRARY '..distName,
-				'EXPORTS',
-			}:concat'\n'
---]]
+		-- TODO use this trick: https://stackoverflow.com/questions/9946322/how-to-generate-an-import-library-lib-file-from-a-dll  
+		local deffile = distbase..'.def'
+		file[deffile] = table{
+			'LIBRARY '..distName,
+			'EXPORTS',
+		}:concat'\n'
+		--]]
 
-			local dllLibFile = distbase..'.lib'
-			exec(table{
+		local dllLibFile = distbase..'.lib'
+		exec(table{
 				'lib.exe',
 				'/nologo /nodefaultlib /machine:x64',
-			'/def:'..deffile,
-			'/out:'..dllLibFile,
+				'/def:'..deffile,
+				'/out:'..dllLibFile,
 			}
---			:append(objs)
+			--:append(objs)
 			:concat' '
-			, true)
-		end --]=]
+		, true)
+		--]=]
 	end
 
 	if io.fileexists'vc140.pdb' then
