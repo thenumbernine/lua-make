@@ -347,6 +347,7 @@ function MSVC:preConfig()
 end
 
 function MSVC:postConfig()
+	compileFlags = compileFlags .. ' /std:'..cppver
 	if build == 'debug' then
 		compileFlags = compileFlags .. ' /MD'	-- /MT
 	elseif build == 'release' then
@@ -386,17 +387,20 @@ function MSVC:buildDist(dist, objs)
 		linkFlags = linkFlags .. ' /dll'
 	end
 
-	local distbase = distdir..'/'..distName
+	local distbase = distdir..'\\'..distName
 	local dllfile = dist 
+	local pdbName = distbase..'.pdb'
 
 	if distType == 'app' then
+		linkFlags = linkFlags .. ' /pdb:'..pdbName
+		
 		MSVC.super.buildDist(self, dist, objs)
 	elseif distType == 'lib' then
 		print('building '..dist..' from '..objs:concat' ')
 		local distdir = io.getfiledir(dist)
 		self:mkdir(distdir)
 
-		-- [=[	-- build the static lib
+-- [=[	-- build the static lib
 		local staticLibFile = distbase..'-static.lib'
 		-- static libs don't need all the pieces until they are linked to an .exe
 		-- so don't bother with libs, libpaths, dynamicLibs
@@ -404,10 +408,11 @@ function MSVC:buildDist(dist, objs)
 			'lib.exe',
 			'/nologo /nodefaultlib',
 			'/out:'..staticLibFile,
+			'/pdb:'..pdbName,
 		}:append(objs):concat' ', true)
-		--]=]
+--]=]
 		
-		-- [=[ building DLLs:
+--[=[ building DLLs.  Can't do this until I add all the API export/import macros everywhere ...
 		exec(table{
 			'link.exe',
 			'/dll',
@@ -448,11 +453,12 @@ function MSVC:buildDist(dist, objs)
 			--:append(objs)
 			:concat' '
 		, true)
-		--]=]
+--]=]
 	end
 
 	if io.fileexists'vc140.pdb' then
-		exec('del vc140.pdb', false)
+		print("you made a pdb you weren't expecting for build "..distdir)
+		os.remove'vc140.pdb'
 	end
 end
 
