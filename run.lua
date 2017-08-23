@@ -308,18 +308,39 @@ function OSX:addDependLib(dependName, dependDir)
 	dependLibs:insert(dynamicLibs:last())
 end
 
-local MinGW = class(GCC)
+
+local Windows = class()
+
+function Windows:copyTree(ext, src, dst, must)
+	exec('xcopy /Y /E "'..src..'\\'..ext..'" "'..dst..'\\"', must)
+end
+
+function Windows:copyRes(dist)
+	if io.fileexists'res' then
+		self:copyTree('*', 'res', self:getResourcePath(dist):gsub('/', '\\'), true)
+	end
+end
+
+
+local MinGW = class(GCC, Windows)
 
 function MinGW:preConfig()
 	platform = 'mingw'
 	MinGW.super.preConfig(self)
 end
 
-function MinGW:mkdir(fn)
-	exec('C:\\MinGW\\msys\\1.0\\bin\\mkdir.exe -p '..fn, false)
+function MinGW:buildDist(dist, objs)
+	MinGW.super.buildDist(self, dist, objs)
+	if distType == 'app' then
+		self:copyRes(dist)
+	end
 end
 
-local MSVC = class(Env)
+function MinGW:mkdir(fn)
+	exec([[C:\MinGW\msys\1.0\bin\mkdir.exe -p ]]..fn, false)
+end
+
+local MSVC = class(Env, Windows)
 
 -- enable to make static libs, disable to make dlls
 -- should I make this a per-project option?
@@ -403,7 +424,9 @@ function MSVC:buildDist(dist, objs)
 
 	if distType == 'app' then
 		linkFlags = linkFlags .. ' /pdb:'..pdbName
-		
+
+		self:copyRes(dist)
+
 		MSVC.super.buildDist(self, dist, objs)
 	elseif distType == 'lib' then
 		print('building '..dist..' from '..objs:concat' ')
