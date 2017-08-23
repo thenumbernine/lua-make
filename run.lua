@@ -7,6 +7,7 @@ cmd is: build debug release clean distclean
 
 require 'ext'
 
+home = os.getenv'HOME' or os.getenv'USERPROFILE'
 local find = require 'make.find'
 
 -- not 'local' so the buildinfo script can see it (esp for postBuildDist() )
@@ -219,7 +220,7 @@ function OSX:postConfig()
 
 	-- TODO always use home?  always use /usr/local?
 	--  how to let the user specify?
-	include:insert(os.getenv'HOME'..'/include')
+	include:insert(home..'/include')
 	
 	if build == 'debug' then
 		compileFlags = compileFlags .. ' -mfix-and-continue'
