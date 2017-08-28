@@ -156,6 +156,10 @@ end
 
 local Linux = class(GCC)
 
+function Linux:copyTree(ext, src, dst, must)
+	exec("rsync -avm --include='"..ext.."' -f 'hide,! */' "..src.." "..dst, must)
+end
+
 function Linux:preConfig()
 	platform = 'linux'
 	Linux.super.preConfig(self)
@@ -181,6 +185,8 @@ function Linux:buildDist(dist, objs)
 		-- [[ copy res/ folder into the dist folder
 		if io.fileexists'res' then
 			exec('cp -R res/* '..self:getResourcePath(dist), true)
+			-- TODO
+			-- self:copyTree('*', 'res', self:getResourcePath(dist), true)
 		end
 		--]]
 	end
@@ -198,6 +204,8 @@ function Linux:addDependLib(dependName, dependDir)
 end
 
 local OSX = class(GCC)
+-- TODO 
+--local OSX = class(GCC, Linux) ?
 
 function OSX:preConfig()
 	platform = 'osx'
@@ -282,6 +290,8 @@ function OSX:buildDist(dist, objs)
 		-- copy over Resources
 		if io.fileexists'res' then
 			exec('cp -R res/* '..resDir)
+			-- TODO
+			-- self:copyTree('*', 'res', resDir)
 		end
 
 		-- copy all libs into distdir/lib
@@ -504,7 +514,7 @@ function MSVC:distclean()
 end
 
 
-local env
+--local env -- make it a global
 local detect = require 'make.detect'()
 if detect == 'gcc-linux' then
 	env = Linux()
