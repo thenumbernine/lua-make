@@ -31,6 +31,8 @@ end
 
 local Env = class()
 
+function Env:fixpath(s) return s end
+
 function Env:preConfig()
 	resetMacros()
 
@@ -65,13 +67,13 @@ function Env:buildObj(obj, src)
 			compiler,
 			compileFlags,
 		}:append(
-			include:map(function(path) return compileIncludeFlag..path end)
+			include:map(function(path) return compileIncludeFlag..self:fixpath(path) end)
 		):append(
 			macros:map(function(macro) return compileMacroFlag..macro end)
 		):append{
 			compileOutputFlag, 
-			obj,
-			src
+			self:fixpath(obj),
+			self:fixpath(src)
 		}:concat' '
 	)
 end
@@ -86,11 +88,11 @@ function Env:buildDist(dist, objs)
 	self:mkdir(distdir)
 	exec(
 		table{linker, linkFlags}
-		:append(objs)
-		:append(libpaths:map(function(libpath) return linkLibPathFlag..libpath end))
+		:append(objs:map(function(obj) return self:fixpath(obj) end))
+		:append(libpaths:map(function(libpath) return self:fixpath(linkLibPathFlag..libpath) end))
 		:append(libs:map(function(lib) return linkLibFlag..lib end))
-		:append(dynamicLibs)
-		:append{linkOutputFlag..dist}
+		:append(dynamicLibs:map(function(dynlib) return self:fixpath(dynlib) end))
+		:append{linkOutputFlag..self:fixpath(dist)}
 		:concat' ', true)
 end
 
@@ -325,13 +327,17 @@ end
 
 local Windows = class()
 
+function Windows:fixpath(path)
+	return (path:gsub('/', '\\'))
+end
+
 function Windows:copyTree(ext, src, dst, must)
 	exec('xcopy /Y /E "'..src..'\\'..ext..'" "'..dst..'\\"', must)
 end
 
 function Windows:copyRes(dist)
 	if io.fileexists'res' then
-		self:copyTree('*', 'res', self:getResourcePath(dist):gsub('/', '\\'), true)
+		self:copyTree('*', 'res', self:fixpath(self:getResourcePath(dist)), true)
 	end
 end
 
@@ -423,7 +429,7 @@ function MSVC:mkdir(fn)
 	if io.fileexists(fn) then
 		assert(io.isdir(fn), "tried to mkdir on a file that is not a directory")
 	else
-		exec('mkdir "'..fn:gsub('/','\\')..'"', false)
+		exec('mkdir "'..self:fixpath(fn)..'"', false)
 	end
 end
 
@@ -441,7 +447,7 @@ function MSVC:buildDist(dist, objs)
 	local pdbName = distbase..'.pdb'
 
 	if distType == 'app' then
-		linkFlags = linkFlags .. ' /pdb:'..pdbName
+		linkFlags = linkFlags .. ' /pdb:'..self:fixpath(pdbName)
 
 		self:copyRes(dist)
 
@@ -458,8 +464,7 @@ function MSVC:buildDist(dist, objs)
 		exec(table{
 			'lib.exe',
 			'/nologo /nodefaultlib',
-			'/out:'..staticLibFile,
-			'/pdb:'..pdbName,
+			'/out:'..self:fixpath(staticLibFile),
 		}:append(objs):concat' ', true)
 --]=]
 		
@@ -468,6 +473,7 @@ function MSVC:buildDist(dist, objs)
 			'link.exe',
 			'/dll',
 			'/out:'..dllfile,
+			--'/pdb:'..self:fixpath(pdbName),
 		}
 		--:append(libpaths:map(function(libpath) return '/libpath:'..libpath end))
 		--:append(libs:map(function(lib) return lib end))
