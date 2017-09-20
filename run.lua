@@ -49,7 +49,7 @@ end
 
 function Env:mkdir(fn)
 	if io.fileexists(fn) then
-		assert(not io.isdir(fn), "tried to mkdir on a file that is not a directory")
+		assert(io.isdir(fn), "tried to mkdir on a file that is not a directory")
 	else
 		exec('mkdir -p '..fn, false)
 	end
