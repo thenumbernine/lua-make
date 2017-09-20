@@ -47,11 +47,15 @@ end
 function Env:postConfig() 
 end
 
+function Env:mkdirCmd(fn)
+	exec('mkdir -p '..fn, false)
+end
+
 function Env:mkdir(fn)
 	if io.fileexists(fn) then
 		assert(io.isdir(fn), "tried to mkdir on a file that is not a directory")
 	else
-		exec('mkdir -p '..fn, false)
+		self:mkdirCmd(fn)
 	end
 end
 
@@ -356,7 +360,7 @@ function MinGW:buildDist(dist, objs)
 	end
 end
 
-function MinGW:mkdir(fn)
+function MinGW:mkdirCmd(fn)
 	exec([[C:\MinGW\msys\1.0\bin\mkdir.exe -p ]]..fn, false)
 end
 
@@ -425,12 +429,8 @@ function MSVC:addDependLib(dependName, dependDir)
 	--]]
 end
 
-function MSVC:mkdir(fn)
-	if io.fileexists(fn) then
-		assert(io.isdir(fn), "tried to mkdir on a file that is not a directory")
-	else
-		exec('mkdir "'..self:fixpath(fn)..'"', false)
-	end
+function MSVC:mkdirCmd(fn)
+	exec('mkdir "'..self:fixpath(fn)..'"', false)
 end
 
 function MSVC:buildDist(dist, objs)
