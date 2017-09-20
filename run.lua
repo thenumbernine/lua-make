@@ -46,7 +46,11 @@ function Env:postConfig()
 end
 
 function Env:mkdir(fn)
-	exec('mkdir -p '..fn, false)
+	if io.fileexists(fn) then
+		assert(not io.isdir(fn), "tried to mkdir on a file that is not a directory")
+	else
+		exec('mkdir -p '..fn, false)
+	end
 end
 
 function Env:addDependLib(dependName, dependDir)
@@ -416,7 +420,11 @@ function MSVC:addDependLib(dependName, dependDir)
 end
 
 function MSVC:mkdir(fn)
-	exec('mkdir "'..fn:gsub('/','\\')..'"', false)
+	if io.fileexists(fn) then
+		assert(io.isdir(fn), "tried to mkdir on a file that is not a directory")
+	else
+		exec('mkdir "'..fn:gsub('/','\\')..'"', false)
+	end
 end
 
 function MSVC:buildDist(dist, objs)
