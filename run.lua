@@ -392,7 +392,7 @@ function MSVC:preConfig()
 end
 
 function MSVC:postConfig()
-	compileFlags = compileFlags .. ' /std:'..cppver
+	--compileFlags = compileFlags .. ' /std:'..cppver
 	if build == 'debug' then
 		compileFlags = compileFlags .. ' /MD'	-- /MT
 	elseif build == 'release' then
