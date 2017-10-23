@@ -7,4 +7,3 @@ else
 	error "couldn't deduce platform"
 end
 os.exit()
-

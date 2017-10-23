@@ -559,15 +559,33 @@ local function needsUpdate(target, depends)
 	
 	local targetAttr = lfs.attributes(target)
 	if not targetAttr then return true end
-	
+
+	local dependModification
 	for _,depend in ipairs(depends) do
 		local dependAttr = assert(lfs.attributes(depend))
-		if targetAttr.change < dependAttr.change then
-			return true
+		if not dependModification then
+			dependModification = dependAttr.modification
+		else
+			if dependAttr.modification > dependModification then
+				dependModification = dependAttr.modification
+			end
 		end
 	end
+	if not dependModification then
+		print('failed to find any dependency modification timestamp -- rebuilding')
+		return true
+	end
 	
-	print('target up-to-date: '..target)
+	-- if the newest dependency modification time is newer than the target time then rebuild
+	if dependModification > targetAttr.modification then
+		return true
+	end
+
+	local date = os.date:bind'%Y-%m-%d %H:%M:%S'
+	print('target up-to-date: '..target
+		..' ('..date(targetAttr.modification)
+		..' vs '..date(dependModification)
+		..')')
 	return false
 end
 
