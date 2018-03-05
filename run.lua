@@ -413,7 +413,7 @@ function MSVC:preConfig()
 	if build == 'debug' then
 		compileFlags = compileFlags .. ' /Od /Zi'
 	elseif build == 'release' then
-		compileFlags = compileFlags .. ' /Ot /Ox'
+		compileFlags = compileFlags .. ' /O2'
 	end
 	compileOutputFlag = '/Fo:'
 	compileIncludeFlag = '/I'
