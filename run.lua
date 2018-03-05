@@ -208,9 +208,9 @@ function Linux:addDependLib(dependName, dependDir)
 	libpaths:insert(dependDir..'/dist/'..platform..'/'..build)
 	--]]
 	-- [[ adding the .so
-	dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..libPrefix..dependName..libSuffix)
+	dynamicLibs:insert(1, dependDir..'/dist/'..platform..'/'..build..'/'..libPrefix..dependName..libSuffix)
 	--]]
-	dependLibs:insert(dynamicLibs:last())
+	dependLibs:insert(1, dynamicLibs:last())
 end
 
 local OSX = class(GCC)
