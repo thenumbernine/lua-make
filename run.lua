@@ -171,7 +171,7 @@ function Linux:copyTree(ext, src, dst, must)
 end
 
 function Linux:preConfig()
-	platform = 'linux'
+	platform = 'linux'		-- TODO make this unique per-environment class
 	Linux.super.preConfig(self)
 end
 
@@ -364,6 +364,33 @@ function MinGW:mkdirCmd(fn)
 	exec([[C:\MinGW\msys\1.0\bin\mkdir.exe -p ]]..fn, false)
 end
 
+
+local ClangWindows = class(GCC, Windows)
+
+-- don't swap /'s with \'s
+--function ClangWindows:fixpath(path) return path end
+
+function ClangWindows:mkdirCmd(fn)
+	exec('mkdir "'..self:fixpath(fn)..'"', false)
+end
+
+function ClangWindows:preConfig()
+	ClangWindows.super.preConfig(self)
+	platform = 'clang_win'
+	compileFlags = '-c -Wall'	-- get rid of -fPIC
+	compiler = 'clang++'
+	linker = 'clang++'
+	appSuffix = '.exe'
+end
+
+function ClangWindows:buildDist(dist, objs)
+	MinGW.super.buildDist(self, dist, objs)
+	if distType == 'app' then
+		self:copyRes(dist)
+	end
+end
+
+
 local MSVC = class(Env, Windows)
 
 -- enable to make static libs, disable to make dlls
@@ -529,13 +556,15 @@ end
 
 
 --local env -- make it a global
-local detect = require 'make.detect'()
-if detect == 'gcc-linux' then
+local detect = platform or require 'make.detect'()
+if detect == 'linux' then
 	env = Linux()
-elseif detect == 'msvc-windows' then
+elseif detect == 'msvc' then
 	env = MSVC()
-elseif detect == 'mingw-windows' then
+elseif detect == 'mingw' then
 	env = MinGW()
+elseif detect == 'clang_win' then
+	env = ClangWindows()
 elseif detect == 'osx' then
 	env = OSX()
 else

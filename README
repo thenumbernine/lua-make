@@ -21,3 +21,14 @@ and to clean ...
 
 if you want to do more than one thing at once...
 	lua /path/to/lua/make/run.lua clean distclean all
+
+
+if you want a custom platform:
+lua -e "platform='$PLATFORM'" make.lua
+
+where $PLATFORM can be:
+	osx
+	linux
+	clang_win
+	mingw
+	msvc
