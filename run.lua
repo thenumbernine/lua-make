@@ -10,11 +10,27 @@ require 'ext'
 home = os.getenv'HOME' or os.getenv'USERPROFILE'
 local find = require 'make.find'
 
+local function getn(...)
+	local t = {...}
+	t.n = select('#', ...)
+	return t
+end
+
 -- not 'local' so the buildinfo script can see it (esp for postBuildDist() )
 function exec(cmd, must)
 	print('>> '..cmd)
 	if must or must == nil then 
-		assert(os.execute(cmd))
+		local result, why, errno = os.execute(cmd)
+		if not result then
+			if not ({
+				-- windows platforms are giving me trouble with os.execute on luajit ...
+				'msvc',
+				'mingw',
+				'clang_win',
+			}[platform] and why == 'unknown') then
+				assert(result, why, errno)
+			end
+		end
 	else
 		os.execute(cmd)
 	end
@@ -42,9 +58,6 @@ function Env:preConfig()
 	libs = table()
 	dependLibs = table()
 	dynamicLibs = table()
-end
-
-function Env:postConfig() 
 end
 
 function Env:mkdirCmd(fn)
@@ -161,7 +174,6 @@ function GCC:postConfig()
 			linkFlags = linkFlags .. ' -Wl,-rpath=lib'
 		end
 	end
-	GCC.super.postConfig(self)
 end
 
 local Linux = class(GCC)
@@ -345,25 +357,89 @@ function Windows:copyRes(dist)
 	end
 end
 
+function Windows:postConfig()
+	include:insert(home..'\\include')
+end
+
 
 local MinGW = class(GCC, Windows)
 
 function MinGW:preConfig()
 	platform = 'mingw'
 	MinGW.super.preConfig(self)
+	appSuffix = '.exe'
+	libPrefix = 'lib'
+	libSuffix = '-static.a'
+end
+
+function MinGW:addDependLib(dependName, dependDir)
+	dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..libPrefix..dependName..libSuffix)
+	dependLibs:insert(dynamicLibs:last())
+end
+
+function MinGW:postConfig()
+	include:insert(home..'/include')
+	
+	compileFlags = compileFlags .. ' -std='..cppver
+	
+	--GCC.postConfig(self)		-- adds link flags and such
+	--compileFlags = compileFlags .. ' -std='..cppver
+
+	if distType == 'app' then
+		-- add depend libs last
+		libs:insert(1, 'mingw32')
+		libs = table(dependLibs):append(libs)
+	end
+	--[=[ I never got static *or* dynamic working with g++.exe due to my leaving one method external of the dll...
+	--		so I'm just using ar instead
+	if distType == 'lib' then
+		--linkFlags = linkFlags .. ' -static -Wl,--out-implib,--enable-auto-import,dist/'..platform..'/'..build..'/'..libPrefix..distName..'.a'
+		--compileFlags = compileFlags .. [[ -Wl,--unresolved-symbols=ignore-in-object-files]]
+		--compileFlags = compileFlags .. [[ -Wl,--unresolved-symbols=ignore-in-shared-libs]]
+		--compileFlags = compileFlags .. [[ -Wl,--warn-unresolved-symbols]]
+	end
+	--]=]
+	if pthread then
+		compileFlags = compileFlags .. ' -pthread'
+		linkFlags = linkFlags .. ' -pthread'
+	end
+	--linkFlags = linkFlags .. ' -Wl,--whole-archive'
+	--libs:insert(1, 'mingw32')
 end
 
 function MinGW:buildDist(dist, objs)
+	if distType == 'lib' then
+		local distdir = io.getfiledir(dist)
+		self:mkdir(distdir)
+		
+		exec(table{
+			'ar rcs',
+			dist,
+		}:append(objs):concat' ')
+		return
+	end
+
 	MinGW.super.buildDist(self, dist, objs)
 	if distType == 'app' then
 		self:copyRes(dist)
 	end
 end
 
+function MinGW:addDependLib(dependName, dependDir)
+	-- [[ using -l and -L
+	--libs:insert(1, dependName..'-static')
+	libpaths:insert(dependDir..'/dist/'..platform..'/'..build)
+	dependLibs:insert(dependName..'-static')
+	--]]
+	--[[ adding the .so
+	dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..libPrefix..dependName..libSuffix)
+	dependLibs:insert(dynamicLibs:last())
+	--]]
+end
+
 function MinGW:mkdirCmd(fn)
 	exec([[C:\MinGW\msys\1.0\bin\mkdir.exe -p ]]..fn, false)
 end
-
 
 local ClangWindows = class(GCC, Windows)
 
@@ -377,10 +453,12 @@ end
 function ClangWindows:preConfig()
 	ClangWindows.super.preConfig(self)
 	platform = 'clang_win'
-	compileFlags = '-c -Wall'	-- get rid of -fPIC
-	compiler = 'clang++'
-	linker = 'clang++'
+	compileFlags = '-c -Wall -Xclang -flto-visibility-public-std'	-- -fPIC complains
+	compiler = 'clang'
+	linker = 'clang'
+	objSuffix = '.o'
 	appSuffix = '.exe'
+	libSuffix = '.so'
 end
 
 function ClangWindows:buildDist(dist, objs)
@@ -389,6 +467,12 @@ function ClangWindows:buildDist(dist, objs)
 		self:copyRes(dist)
 	end
 end
+
+function ClangWindows:postConfig()
+	Windows.postConfig(self)
+	GCC.postConfig(self)
+end
+
 
 
 local MSVC = class(Env, Windows)
@@ -429,7 +513,7 @@ function MSVC:preConfig()
 end
 
 function MSVC:postConfig()
-	--compileFlags = compileFlags .. ' /std:'..cppver
+	compileFlags = compileFlags .. ' /std:'..cppver
 	if build == 'debug' then
 		compileFlags = compileFlags .. ' /MD'	-- /MT
 	elseif build == 'release' then
@@ -442,8 +526,8 @@ function MSVC:postConfig()
 	if distType == 'app' then
 		linkFlags = linkFlags .. ' /subsystem:console'
 	end
-	
-	MSVC.super.postConfig(self)
+
+	Windows.postConfig(self)
 end
 
 function MSVC:addDependLib(dependName, dependDir)
@@ -547,11 +631,13 @@ function MSVC:buildDist(dist, objs)
 end
 
 function MSVC:clean()
-	exec'rmdir /s /q obj'
+	-- false in case the dir isnt there
+	exec('rmdir /s /q obj', false)
 end
 
 function MSVC:distclean()
-	exec'rmdir /s /q dist'
+	-- false in case the dir isnt there
+	exec('rmdir /s /q dist', false)
 end
 
 
@@ -661,6 +747,8 @@ local function doBuild(args)
 			if (platform == 'linux' and distType == 'lib' and push_distType == 'app')
 			or (platform == 'osx' and distType == 'lib')
 			or (platform == 'msvc' and distType ~= 'inc')
+			or (platform == 'mingw' and distType ~= 'inc')
+			or (platform == 'clang_win' and distType ~= 'inc')
 			then
 				env:addDependLib(dependName, cwd)
 			end
