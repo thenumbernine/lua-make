@@ -88,8 +88,7 @@ function Env:buildObj(obj, src)
 		):append(
 			macros:map(function(macro) return compileMacroFlag..macro end)
 		):append{
-			compileOutputFlag, 
-			self:fixpath(obj),
+			compileOutputFlag..self:fixpath(obj),
 			self:fixpath(src)
 		}:concat' '
 	)
@@ -150,7 +149,7 @@ function GCC:preConfig()
 	end
 	compileIncludeFlag = '-I'
 	compileMacroFlag = '-D'
-	compileOutputFlag = '-o'
+	compileOutputFlag = '-o '	-- space ... because with msvc there shouldn't be a space
 	linker = 'g++'
 	linkLibPathFlag = '-L'
 	linkLibFlag = '-l'
@@ -386,7 +385,6 @@ function MinGW:postConfig()
 	--compileFlags = compileFlags .. ' -std='..cppver
 
 	if distType == 'app' then
-		-- add depend libs last
 		libs:insert(1, 'mingw32')
 		libs = table(dependLibs):append(libs)
 	end
@@ -420,6 +418,7 @@ function MinGW:buildDist(dist, objs)
 	end
 
 	MinGW.super.buildDist(self, dist, objs)
+	
 	if distType == 'app' then
 		self:copyRes(dist)
 	end
@@ -440,39 +439,6 @@ end
 function MinGW:mkdirCmd(fn)
 	exec([[C:\MinGW\msys\1.0\bin\mkdir.exe -p ]]..fn, false)
 end
-
-local ClangWindows = class(GCC, Windows)
-
--- don't swap /'s with \'s
---function ClangWindows:fixpath(path) return path end
-
-function ClangWindows:mkdirCmd(fn)
-	exec('mkdir "'..self:fixpath(fn)..'"', false)
-end
-
-function ClangWindows:preConfig()
-	ClangWindows.super.preConfig(self)
-	platform = 'clang_win'
-	compileFlags = '-c -Wall -Xclang -flto-visibility-public-std'	-- -fPIC complains
-	compiler = 'clang'
-	linker = 'clang'
-	objSuffix = '.o'
-	appSuffix = '.exe'
-	libSuffix = '.so'
-end
-
-function ClangWindows:buildDist(dist, objs)
-	MinGW.super.buildDist(self, dist, objs)
-	if distType == 'app' then
-		self:copyRes(dist)
-	end
-end
-
-function ClangWindows:postConfig()
-	Windows.postConfig(self)
-	GCC.postConfig(self)
-end
-
 
 
 local MSVC = class(Env, Windows)
@@ -499,7 +465,7 @@ function MSVC:preConfig()
 	elseif build == 'release' then
 		compileFlags = compileFlags .. ' /O2'
 	end
-	compileOutputFlag = '/Fo:'
+	compileOutputFlag = '/Fo'
 	compileIncludeFlag = '/I'
 	compileMacroFlag = '/D'
 	linker = 'link.exe'
@@ -574,7 +540,8 @@ function MSVC:buildDist(dist, objs)
 		-- so don't bother with libs, libpaths, dynamicLibs
 		exec(table{
 			'lib.exe',
-			'/nologo /nodefaultlib',
+			'/nologo',
+			'/nodefaultlib',
 			'/out:'..self:fixpath(staticLibFile),
 		}:append(objs):concat' ', true)
 --]=]
@@ -639,6 +606,93 @@ function MSVC:distclean()
 	-- false in case the dir isnt there
 	exec('rmdir /s /q dist', false)
 end
+
+
+--[==[ like gcc
+local ClangWindows = class(GCC, Windows)
+
+-- don't swap /'s with \'s
+--function ClangWindows:fixpath(path) return path end
+
+function ClangWindows:mkdirCmd(fn)
+	exec('mkdir "'..self:fixpath(fn)..'"', false)
+end
+
+function ClangWindows:preConfig()
+	ClangWindows.super.preConfig(self)
+	platform = 'clang_win'
+	compileFlags = '-c -Wall -Xclang -flto-visibility-public-std'	-- -fPIC complains
+	compiler = 'clang++.exe'
+	linker = 'clang++.exe'
+	objSuffix = '.o'
+	appSuffix = '.exe'
+	libPrefix = ''
+	libSuffix = '-static.lib'
+end
+
+function ClangWindows:addDependLib(dependName, dependDir)
+	dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..libPrefix..dependName..libSuffix)
+	dependLibs:insert(dynamicLibs:last())
+end
+
+function ClangWindows:postConfig()
+	include:insert(home..'/include')
+	compileFlags = compileFlags .. ' -std='..cppver
+
+	if distType == 'lib' then
+		linkFlags = linkFlags .. ' -static'
+	end
+	if distType == 'app' then
+		libs = table(dependLibs):append(libs)
+	end
+end
+
+function ClangWindows:buildDist(dist, objs)
+	local distdir = io.getfiledir(dist)
+	if distType == 'lib' then
+		linkFlags = linkFlags .. ' /dll'
+	end
+
+	local distbase = distdir..'\\'..distName
+	local dllfile = dist 
+	--local pdbName = distbase..'.pdb'
+
+	if distType == 'app' then
+		--linkFlags = linkFlags .. ' /pdb:'..self:fixpath(pdbName)
+
+		self:copyRes(dist)
+
+		ClangWindows.super.buildDist(self, dist, objs)
+	elseif distType == 'lib' then
+		print('building '..dist..' from '..objs:concat' ')
+		local distdir = io.getfiledir(dist)
+		self:mkdir(distdir)
+
+-- [=[	-- build the static lib
+		local staticLibFile = distbase..'-static.lib'
+		-- static libs don't need all the pieces until they are linked to an .exe
+		-- so don't bother with libs, libpaths, dynamicLibs
+		exec(table{
+			'llvm-lib.exe',
+			'/nologo',
+			--'/nodefaultlib',	-- llvm-lib can't handle this
+			'/out:'..self:fixpath(staticLibFile),
+		}:append(objs):concat' ', true)
+--]=]
+	end
+end
+--]==]
+
+
+-- [==[ like msvc
+local ClangWindows = class(MSVC)
+
+function ClangWindows:preConfig()
+	ClangWindows.super.preConfig(self)
+	platform = 'clang_win'
+	compiler = 'clang-cl.exe'
+end
+--]==]
 
 
 --local env -- make it a global
