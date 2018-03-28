@@ -3,18 +3,50 @@
 lua make.lua [cmd]
 reads buildinfo
 cmd is: build debug release clean distclean
+
+globals defined per-project:
+distName = name of the project
+distType = type of the project.  
+	possible options are:
+		'app' for applications / executables
+		'lib' for libraries
+		'inc' for include files (no code / nothing to build, but still used for buildinfo dependencies)
+depends = list of paths to projects that this is dependent upon
+
+globals defined by lua-make:
+home = home directory
+platform = build platform
+build = 'debug' or 'release'
+objSuffix = suffix of object file.  '.o' on unix systems, '.obj' in M$ systems.
+libPrefix = prefix of library files.  'lib' on unix systems.
+libSuffix = lib suffix. '.so', '.dylib', '.a', '.lib', '.dll', etc.
+appSuffix = executable suffix.  empty on unix systems, '.exe' for M$
+compiler = compiler binary name.  g++, clang++, cl.exe, etc...
+compileFlags = flags to pass to compiler
+compileIncludeFlag = flag for include directory
+compileMacroFlag = flag for C++ macros
+compileOutputFlag = flag for output filename
+linker = linker binary name
+linkLibPathFlag
+linkLibFlag
+linkFlags
+linkOutputFlag
+pthread = flag for including pthread
+cppver = C++ version
+include = table of include directories to forward to the C++ compiler
+dependLibs = other luamake projects that the project is dependent upon (for executing recursive buildinfos)
+libs = -l libraries, be they static or dynamic, automatically detected by the compiler/linker 
+libpaths = -L search paths for 'libs'
+dynamicLibs
+	on linux this contains paths to explicit .so files
+	on osx this is .dylib files
+	on windows this is .lib files associated with .dll files (as opposed to the .lib files that are static libraries ... smh windows)
 --]]
 
 require 'ext'
 
 home = os.getenv'HOME' or os.getenv'USERPROFILE'
 local find = require 'make.find'
-
-local function getn(...)
-	local t = {...}
-	t.n = select('#', ...)
-	return t
-end
 
 -- not 'local' so the buildinfo script can see it (esp for postBuildDist() )
 function exec(cmd, must)
@@ -72,12 +104,20 @@ function Env:mkdir(fn)
 	end
 end
 
+function Env:getSources()
+	return find('src', '%.cpp$')
+end
+
 function Env:addDependLib(dependName, dependDir)
 	dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..libPrefix..dependName..libSuffix)
 end
 
 function Env:buildObj(obj, src)
 	print('building '..obj..' from '..src)
+	
+-- TODO make Env:postConfig and put this in it 
+macros:insert('distName_'..distName)
+	
 	self:mkdir(io.getfiledir(obj))
 	exec(
 		table{
@@ -98,7 +138,7 @@ function Env:getDistSuffix()
 	return distType == 'lib' and libSuffix or appSuffix
 end
 
-function Env:buildDist(dist, objs)
+function Env:buildDist(dist, objs)	
 	print('building '..dist..' from '..objs:concat' ')	
 	local distdir = io.getfiledir(dist)
 	self:mkdir(distdir)
@@ -478,6 +518,41 @@ function MSVC:preConfig()
 	--macros:insert'_USE_MATH_DEFINES'
 end
 
+function MSVC:getSources()
+	local srcs = MSVC.super.getSources(self)
+
+--[=[
+	-- /force:unresolved requires an entry point
+	-- https://stackoverflow.com/questions/24547536/unresolved-external-symbol-displayed-as-an-error-while-forceunresolved-is-used 
+	-- https://msdn.microsoft.com/en-gb/library/windows/desktop/ms682596%28v=vs.85%29.aspx  
+	if distType == 'lib' then
+		-- hmm, now I need a cleanup ...
+		local tmp = (os.tmpname()..'.cpp'):gsub('\\','/')
+		-- hmm, do i need a .cpp extension?
+		print('attempting to write to '..tmp)
+		
+--file[tmp] =
+local f = assert(io.open(tmp, 'w'))
+f:write
+		[[
+#include <windows.h>
+BOOL WINAPI DllMain(
+    HINSTANCE hinstDLL,
+    DWORD fdwReason,
+    LPVOID lpReserved
+) {
+    return TRUE;
+}
+]]
+f:close()
+
+		srcs:insert(tmp)
+	end
+--]=]
+
+	return srcs
+end
+
 function MSVC:postConfig()
 	compileFlags = compileFlags .. ' /std:'..cppver
 	if build == 'debug' then
@@ -534,61 +609,78 @@ function MSVC:buildDist(dist, objs)
 		local distdir = io.getfiledir(dist)
 		self:mkdir(distdir)
 
--- [=[	-- build the static lib
-		local staticLibFile = distbase..'-static.lib'
-		-- static libs don't need all the pieces until they are linked to an .exe
-		-- so don't bother with libs, libpaths, dynamicLibs
-		exec(table{
-			'lib.exe',
-			'/nologo',
-			'/nodefaultlib',
-			'/out:'..self:fixpath(staticLibFile),
-		}:append(objs):concat' ', true)
---]=]
-		
---[=[ building DLLs.  Can't do this until I add all the API export/import macros everywhere ...
-		exec(table{
-			'link.exe',
-			'/dll',
-			'/out:'..dllfile,
-			--'/pdb:'..self:fixpath(pdbName),
-		}
-		--:append(libpaths:map(function(libpath) return '/libpath:'..libpath end))
-		--:append(libs:map(function(lib) return lib end))
-		:append(libs)
---		:append(dynamicLibs)
-		:append(objs)
-		:concat' ', true)
-
-		-- [[ 
-		local defSrcFile = distbase..'.def.txt'
-		exec(table{
-			'dumpbin.exe',
-			'/nologo /exports',
-			dllfile,
-			'>',
-			defSrcFile
-		}:concat' ', true)
-
-		-- TODO use this trick: https://stackoverflow.com/questions/9946322/how-to-generate-an-import-library-lib-file-from-a-dll  
-		local deffile = distbase..'.def'
-		file[deffile] = table{
-			'LIBRARY '..distName,
-			'EXPORTS',
-		}:concat'\n'
-		--]]
-
-		local dllLibFile = distbase..'.lib'
-		exec(table{
+		-- build the static lib
+		if self.useStatic then
+			local staticLibFile = distbase..'-static.lib'
+			-- static libs don't need all the pieces until they are linked to an .exe
+			-- so don't bother with libs, libpaths, dynamicLibs
+			exec(table{
 				'lib.exe',
-				'/nologo /nodefaultlib /machine:x64',
-				'/def:'..deffile,
-				'/out:'..dllLibFile,
-			}
-			--:append(objs)
-			:concat' '
-		, true)
+				'/nologo',
+				'/incremental',
+				'/nodefaultlib',
+				'/out:'..self:fixpath(staticLibFile),
+			}:append(objs):concat' ', true)
+		
+		-- building DLLs.  
+		-- Can't do this until I add all the API export/import macros everywhere ...
+		else
+	
+			exec(table{
+				'link.exe',
+				'/dll',
+	
+--[=[
+here's a dilemma...
+I don't want to put declspecs everywhere in the code just for windows
+so what are my other options?
+create a .lib to link against ... but this means having the lib point to a specific dll,
+and that means always giving the dll the same name
+so my solution: /force:unresolved
+but this only works if we have a 'DllMain' function defined ...
 --]=]
+--'/force:unresolved',
+'/incremental',
+				
+				'/out:'..dllfile,
+				--'/pdb:'..self:fixpath(pdbName),
+			}
+			--:append(libpaths:map(function(libpath) return '/libpath:'..libpath end))
+			--:append(libs:map(function(lib) return lib end))
+			:append(libs)
+			:append(dynamicLibs)
+			:append(objs)
+			:concat' ', true)
+
+			-- [[ 
+			local defSrcFile = distbase..'.def.txt'
+			exec(table{
+				'dumpbin.exe',
+				'/nologo /exports',
+				dllfile,
+				'>',
+				defSrcFile
+			}:concat' ', true)
+
+			-- TODO use this trick: https://stackoverflow.com/questions/9946322/how-to-generate-an-import-library-lib-file-from-a-dll  
+			local deffile = distbase..'.def'
+			file[deffile] = table{
+				'LIBRARY '..distName,
+				'EXPORTS',
+			}:concat'\n'
+			--]]
+
+			local dllLibFile = distbase..'.lib'
+			exec(table{
+					'lib.exe',
+					'/nologo /nodefaultlib /machine:x64',
+					'/def:'..deffile,
+					'/out:'..dllLibFile,
+				}
+				--:append(objs)
+				:concat' '
+			, true)
+		end
 	end
 
 	if io.fileexists'vc140.pdb' then
@@ -817,7 +909,7 @@ local function doBuild(args)
 		env:postConfig()
 		
 		-- determine source files
-		local srcs = find('src', '%.cpp$')
+		local srcs = env:getSources()
 		if #srcs == 0 then
 			print'no input files found'
 		else
