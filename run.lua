@@ -14,29 +14,29 @@ distType = type of the project.
 depends = list of paths to projects that this is dependent upon
 
 globals defined by lua-make:
-home = home directory
-platform = build platform
-build = 'debug' or 'release'
+home = home directory.
+platform = build platform.
+build = 'debug' or 'release'.
 objSuffix = suffix of object file.  '.o' on unix systems, '.obj' in M$ systems.
 libPrefix = prefix of library files.  'lib' on unix systems.
 libSuffix = lib suffix. '.so', '.dylib', '.a', '.lib', '.dll', etc.
-appSuffix = executable suffix.  empty on unix systems, '.exe' for M$
+appSuffix = executable suffix.  empty on unix systems, '.exe' for M$.
 compiler = compiler binary name.  g++, clang++, cl.exe, etc...
-compileFlags = flags to pass to compiler
-compileIncludeFlag = flag for include directory
-compileMacroFlag = flag for C++ macros
-compileOutputFlag = flag for output filename
-linker = linker binary name
-linkLibPathFlag
-linkLibFlag
-linkFlags
-linkOutputFlag
-pthread = flag for including pthread
-cppver = C++ version
-include = table of include directories to forward to the C++ compiler
-dependLibs = other luamake projects that the project is dependent upon (for executing recursive buildinfos)
-libs = -l libraries, be they static or dynamic, automatically detected by the compiler/linker 
-libpaths = -L search paths for 'libs'
+compileFlags = flags to pass to compiler.
+compileIncludeFlag = flag for include directory.
+compileMacroFlag = flag for C++ macros.
+compileOutputFlag = flag for output filename.
+linker = linker binary name.
+linkLibPathFlag = flag for adding library search paths.
+linkLibFlag = flag for adding libraries.
+linkOutputFlag = flag for specifying the output filename.
+linkFlags = extra flags to send to the linker
+pthread = flag for including pthread.
+cppver = C++ version.
+include = table of include directories to forward to the C++ compiler.
+dependLibs = other luamake projects that the project is dependent upon (for executing recursive buildinfos).
+libs = -l libraries, be they static or dynamic, automatically detected by the compiler/linker.
+libpaths = -L search paths for 'libs'.
 dynamicLibs
 	on linux this contains paths to explicit .so files
 	on osx this is .dylib files
@@ -172,6 +172,10 @@ function Env:distclean()
 	exec'rm -fr dist'
 end
 
+function Env:getDependentHeaders(src)
+	return {}
+end
+
 
 local GCC = class(Env)
 
@@ -214,6 +218,37 @@ function GCC:postConfig()
 		end
 	end
 end
+
+function GCC:getDependentHeaders(src, obj)
+	-- copied from buildObject ... so maybe borrow that?
+	local cmd = table{
+		compiler,
+		compileFlags,
+	}:append(
+		macros:map(function(macro) return compileMacroFlag..macro end)
+	):append(
+		include:map(function(path) return compileIncludeFlag..self:fixpath(path) end)
+	)
+	--:append{
+	--	compileOutputFlag..self:fixpath(obj),
+	--	self:fixpath(src)
+	--}
+	:concat' '
+	..' -MM '..src
+
+	-- copied from exec() ... so maybe borrow that too?
+	print('>> '..cmd)
+	local results = io.readproc(cmd)
+	results = results:gsub('\\', ' '):gsub('%s+', '\n')
+	results = results:trim():split'\n'
+	local objname = select(2, io.getfiledir(obj))
+	assert(results[1] == objname..':', results[1]..' should be '..objname)
+	results:remove(1)
+	assert(results[1] == src, results[1]..' should be '..src)
+	results:remove(1)
+	return results
+end
+
 
 local Linux = class(GCC)
 
@@ -263,6 +298,7 @@ function Linux:addDependLib(dependName, dependDir)
 	--]]
 	dependLibs:insert(1, dynamicLibs:last())
 end
+
 
 local OSX = class(GCC)
 -- TODO 
@@ -922,14 +958,17 @@ local function doBuild(args)
 
 			if not args.distonly then
 				for i,obj in ipairs(objs) do
-					local src = srcs[i]			
+					local src = srcs[i]
+
+					-- see if we can search for the include the files that this source file depends on
+					local dependentHeaders = env:getDependentHeaders(src, obj)
 					
 					-- if the source file has been modified since the obj was created
 					-- *or* the dependent headers have been modified since the obj was created
 					-- *or* the buildinfo has been modified since the obj was created
 					-- then rebuild
 					-- (otherwise you can skip this build)
-					if needsUpdate(obj, {src}) then
+					if needsUpdate(obj, table.append({src}, dependentHeaders)) then
 						env:buildObj(obj, src)
 					end
 				end
