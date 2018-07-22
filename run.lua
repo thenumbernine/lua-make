@@ -26,6 +26,7 @@ compileFlags = flags to pass to compiler.
 compileIncludeFlag = flag for include directory.
 compileMacroFlag = flag for C++ macros.
 compileOutputFlag = flag for output filename.
+compileGetIncludeFilesFlag = flag for getting include files referenced by this file
 linker = linker binary name.
 linkLibPathFlag = flag for adding library search paths.
 linkLibFlag = flag for adding libraries.
@@ -194,6 +195,7 @@ function GCC:preConfig()
 	compileIncludeFlag = '-I'
 	compileMacroFlag = '-D'
 	compileOutputFlag = '-o '	-- space ... because with msvc there shouldn't be a space
+	compileGetIncludeFilesFlag = '-MM'	-- use -M to get system files as well
 	linker = 'g++'
 	linkLibPathFlag = '-L'
 	linkLibFlag = '-l'
@@ -234,7 +236,7 @@ function GCC:getDependentHeaders(src, obj)
 	--	self:fixpath(src)
 	--}
 	:concat' '
-	..' -MM '..src
+	..' '..compileGetIncludeFilesFlag..' '..src
 
 	-- copied from exec() ... so maybe borrow that too?
 	print('>> '..cmd)
@@ -308,6 +310,10 @@ function OSX:preConfig()
 	platform = 'osx'
 	OSX.super.preConfig(self)
 	compiler = 'clang++'
+
+	-- TODO verify this
+	compileGetIncludeFilesFlag = '-H -fsyntax-only -MM'	-- I hear without -H it will search for includes *and* compile
+	
 	linker = 'clang++'
 	libSuffix = '.dylib'
 end
@@ -544,6 +550,10 @@ function MSVC:preConfig()
 	compileOutputFlag = '/Fo'
 	compileIncludeFlag = '/I'
 	compileMacroFlag = '/D'
+	
+	-- right now this isn't set up to even run.  only GCC compilers do dependency checking.  so TODO test this.
+	compileGetIncludeFilesFlag = '/showIncludes'
+	
 	linker = 'link.exe'
 	linkLibPathFlag = ''
 	linkLibFlag = ''
@@ -751,6 +761,7 @@ function ClangWindows:preConfig()
 	platform = 'clang_win'
 	compileFlags = '-c -Wall -Xclang -flto-visibility-public-std'	-- -fPIC complains
 	compiler = 'clang++.exe'
+	compileGetIncludeFilesFlag = '-H -fsyntax-only -MM'	-- just like OSX ... consider a common root for clang compilers?
 	linker = 'clang++.exe'
 	objSuffix = '.o'
 	appSuffix = '.exe'
