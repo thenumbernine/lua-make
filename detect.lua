@@ -1,19 +1,21 @@
 local function detect()
-	local uname = io.popen'uname':read'*l':lower()
+	local h = io.popen'uname'
+	local uname = (h:read'*l' or ''):lower()
 	if uname == 'linux' then
 		return 'linux'
 	elseif uname:sub(1,5) == 'mingw'
 	or uname:sub(1,4) == 'msys' 
+	or uname == ''
 	then
-		if io.popen'cl.exe':read'*l' then
-			-- MSVC
-			return 'msvc'
-		elseif io.popen'gcc.exe --version':read'*l' then
-			-- GCC
-			return 'mingw'
-		elseif io.popen'clang.exe':read'*l' then
+		if io.popen'clang-cl.exe --version':read'*a' then
 			-- CLang
 			return 'clang_win'
+		elseif io.popen'gcc.exe --version':read'*a' then
+			-- GCC
+			return 'mingw'
+		elseif io.popen'cl.exe':read'*l' then
+			-- MSVC
+			return 'msvc'
 		end
 	elseif uname == 'darwin' then
 		return 'osx'
