@@ -451,6 +451,7 @@ function MinGW:preConfig()
 	appSuffix = '.exe'
 	libPrefix = 'lib'
 	libSuffix = '-static.a'
+	compileGetIncludeFilesFlag = nil
 end
 
 function MinGW:addDependLib(dependName, dependDir)
@@ -467,7 +468,7 @@ function MinGW:postConfig()
 	--compileFlags = compileFlags .. ' -std='..cppver
 
 	if distType == 'app' then
-		libs:insert(1, 'mingw32')
+		--libs:insert(1, 'mingw32')
 		libs = table(dependLibs):append(libs)
 	end
 	--[=[ I never got static *or* dynamic working with g++.exe due to my leaving one method external of the dll...
@@ -519,8 +520,14 @@ function MinGW:addDependLib(dependName, dependDir)
 end
 
 function MinGW:mkdirCmd(fn)
-	exec([[C:\MinGW\msys\1.0\bin\mkdir.exe -p ]]..fn, false)
+	exec([[mkdir ]]..self:fixpath(fn), false)
 end
+
+-- [[
+function MinGW:getDependentHeaders(...)
+	return Env.getDependentHeaders(self, ...)
+end
+--]]
 
 
 local MSVC = class(Env, Windows)
@@ -663,7 +670,7 @@ function MSVC:buildDist(dist, objs)
 			exec(table{
 				'lib.exe',
 				'/nologo',
-				'/incremental',
+				--'/incremental',	-- now gives a warning: unrecognized option
 				'/nodefaultlib',
 				'/out:'..self:fixpath(staticLibFile),
 			}:append(objs):concat' ', true)
@@ -907,7 +914,7 @@ local function doBuild(args)
 		distType = nil
 		depends = table()
 		
-		cppver = 'c++11'
+		cppver = 'c++17'
 
 		env:preConfig()
 		
@@ -992,8 +999,11 @@ print('distdir', distdir)
 print('dist', dist)
 os.exit()
 --]]			
-			env:buildDist(dist, objs)
-	
+			
+			if needsUpdate(dist, objs) then
+				env:buildDist(dist, objs)
+			end
+
 			-- if postBuildDist is defined then do that too
 			if postBuildDist then
 				postBuildDist(env:getResourcePath(dist))
