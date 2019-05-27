@@ -425,7 +425,9 @@ end
 local Windows = class()
 
 function Windows:fixpath(path)
-	return (path:gsub('/', '\\'))
+	path = path:gsub('/', '\\')
+	if path:find' ' then path = '"'..path..'"' end
+	return path
 end
 
 function Windows:copyTree(ext, src, dst, must)
