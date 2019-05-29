@@ -127,7 +127,17 @@ macros:insert('distName_'..distName)
 		}:append(
 			include:map(function(path) return compileIncludeFlag..self:fixpath(path) end)
 		):append(
-			macros:map(function(macro) return compileMacroFlag..macro end)
+			macros:map(function(macro) 
+				-- how to handle macro values with quotes? 
+				-- yes I ran into this on msvc
+				-- how do osx/linux handle quotes and spaces in macros?
+				-- what is the complete list of characters that need to be escaped?
+				if macro:find' ' or macro:find'"' then
+					return compileMacroFlag..'"'..macro:gsub('"', '\\"')..'"'
+				end
+				
+				return compileMacroFlag..macro 
+			end)
 		):append{
 			compileOutputFlag..self:fixpath(obj),
 			self:fixpath(src)
