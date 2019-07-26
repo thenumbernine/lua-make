@@ -32,3 +32,7 @@ where $PLATFORM can be:
 	clang_win
 	mingw
 	msvc
+
+Alright I want to use this in other scripts, 
+The specific Make subclass needs to be selected by the OS.
+The compile cpp to obj and obj to app commands need to be callable from outside.

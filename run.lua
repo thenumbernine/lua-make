@@ -44,57 +44,43 @@ dynamicLibs
 	on windows this is .lib files associated with .dll files (as opposed to the .lib files that are static libraries ... smh windows)
 --]]
 
-require 'ext'
-
-home = os.getenv'HOME' or os.getenv'USERPROFILE'
+local io = require 'ext.io'
+local table = require 'ext.table'
+local class = require 'ext.class'
 local find = require 'make.find'
-
--- not 'local' so the buildinfo script can see it (esp for postBuildDist() )
-function exec(cmd, must)
-	print('>> '..cmd)
-	if must or must == nil then 
-		local result, why, errno = os.execute(cmd)
-		if not result then
-			if not (({
-				-- windows platforms are giving me trouble with os.execute on luajit ...
-				msvc=1,
-				mingw=1,
-				clang_win=1,
-			})[platform] and why == 'unknown') then
-				assert(result, why, errno)
-			end
-		end
-	else
-		os.execute(cmd)
-	end
-end
-
-local function resetMacros()
-	macros = table{
-		'PLATFORM_'..platform,
-		'BUILD_'..build,
-	}
-	if build == 'debug' then macros:insert'DEBUG' end
-	if build == 'release' then macros:insert'NDEBUG' end
-end
+local exec = require 'make.exec'
+local template = require 'template'
 
 local Env = class()
 
 function Env:fixpath(s) return s end
 
-function Env:preConfig()
-	resetMacros()
+function Env:resetMacros()
+	self.macros = table{
+		'PLATFORM_'..self.platform,
+		'BUILD_'..self.build,
+	}
+	if self.build == 'debug' then self.macros:insert'DEBUG' end
+	if self.build == 'release' then self.macros:insert'NDEBUG' end
+end
 
-	pthread = false
-	include = table{'include'} 
-	libpaths = table()
-	libs = table()
-	dependLibs = table()
-	dynamicLibs = table()
+function Env:preConfig()
+	self:resetMacros()
+
+	self.pthread = false
+	self.include = table{'include'} 
+	self.libpaths = table()
+	self.libs = table()
+	self.dependLibs = table()
+	self.dynamicLibs = table()
+end
+
+function Env:exec(cmd, must)
+	return exec(cmd, must, self.platform)
 end
 
 function Env:mkdirCmd(fn)
-	exec('mkdir -p '..fn, false)
+	self:exec('mkdir -p '..fn, false)
 end
 
 function Env:mkdir(fn)
@@ -110,77 +96,75 @@ function Env:getSources()
 end
 
 function Env:addDependLib(dependName, dependDir)
-	dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..libPrefix..dependName..libSuffix)
+	self.dynamicLibs:insert(dependDir..'/dist/'..self.platform..'/'..self.build..'/'..self.libPrefix..dependName..self.libSuffix)
 end
 
 function Env:buildObj(obj, src)
 	print('building '..obj..' from '..src)
 	
 -- TODO make Env:postConfig and put this in it 
-macros:insert('distName_'..distName)
+self.macros:insert('distName_'..self.distName)
 	
 	self:mkdir(io.getfiledir(obj))
-	exec(
+	self:exec(
 		table{
-			compiler,
-			compileFlags,
-		}:append(
-			include:map(function(path) return compileIncludeFlag..self:fixpath(path) end)
-		):append(
-			macros:map(function(macro) 
-				-- how to handle macro values with quotes? 
-				-- yes I ran into this on msvc
-				-- how do osx/linux handle quotes and spaces in macros?
-				-- what is the complete list of characters that need to be escaped?
-				if macro:find' ' or macro:find'"' then
-					return compileMacroFlag..'"'..macro:gsub('"', '\\"')..'"'
-				end
-				
-				return compileMacroFlag..macro 
-			end)
-		):append{
-			compileOutputFlag..self:fixpath(obj),
+			self.compiler,
+			self.compileFlags,
+		}:append(self.include:map(function(path) 
+			return self.compileIncludeFlag..self:fixpath(path) 
+		end)):append(self.macros:map(function(macro) 
+			-- how to handle macro values with quotes? 
+			-- yes I ran into this on msvc
+			-- how do osx/linux handle quotes and spaces in macros?
+			-- what is the complete list of characters that need to be escaped?
+			if macro:find' ' or macro:find'"' then
+				return self.compileMacroFlag..'"'..macro:gsub('"', '\\"')..'"'
+			end
+			
+			return self.compileMacroFlag..macro 
+		end)):append{
+			self.compileOutputFlag..self:fixpath(obj),
 			self:fixpath(src)
 		}:concat' '
 	)
 end
 
 function Env:getDistSuffix()
-	return distType == 'lib' and libSuffix or appSuffix
+	return self.distType == 'lib' and self.libSuffix or self.appSuffix
 end
 
 function Env:buildDist(dist, objs)	
 	print('building '..dist..' from '..objs:concat' ')	
 	local distdir = io.getfiledir(dist)
 	self:mkdir(distdir)
-	exec(
-		table{linker, linkFlags}
+	self:exec(
+		table{self.linker, self.linkFlags}
 		:append(objs:map(function(obj) return self:fixpath(obj) end))
-		:append(libpaths:map(function(libpath) return self:fixpath(linkLibPathFlag..libpath) end))
-		:append(libs:map(function(lib) return linkLibFlag..lib end))
-		:append(dynamicLibs:map(function(dynlib) return self:fixpath(dynlib) end))
-		:append{linkOutputFlag..self:fixpath(dist)}
+		:append(self.libpaths:map(function(libpath) return self:fixpath(self.linkLibPathFlag..libpath) end))
+		:append(self.libs:map(function(lib) return self.linkLibFlag..lib end))
+		:append(self.dynamicLibs:map(function(dynlib) return self:fixpath(dynlib) end))
+		:append{self.linkOutputFlag..self:fixpath(dist)}
 		:concat' ', true)
 end
 
 function Env:getDist()
-	local distPrefix = distType == 'lib' and libPrefix or ''
+	local distPrefix = self.distType == 'lib' and self.libPrefix or ''
 	local distSuffix = self:getDistSuffix(distPrefix)
-	local distdir = 'dist/'..platform..'/'..build
-	local dist = distdir..'/'..distPrefix..distName..distSuffix
+	local distdir = 'dist/'..self.platform..'/'..self.build
+	local dist = distdir..'/'..distPrefix..self.distName..distSuffix
 	return dist
 end
 
 function Env:getResourcePath(dist)
-	return 'dist/'..platform..'/'..build
+	return 'dist/'..self.platform..'/'..self.build
 end
 
 function Env:clean()
-	exec'rm -fr obj'
+	self:exec'rm -fr obj'
 end
 
 function Env:distclean()
-	exec'rm -fr dist'
+	self:exec'rm -fr dist'
 end
 
 function Env:getDependentHeaders(src)
@@ -191,42 +175,42 @@ end
 local GCC = class(Env)
 
 function GCC:preConfig()
-	objSuffix = '.o'
-	libPrefix = 'lib'
-	libSuffix = '.so'
-	appSuffix = ''
-	compiler = 'g++'
-	compileFlags = '-c -Wall -fPIC'
-	if build == 'debug' then
-		compileFlags = compileFlags .. ' -O0 -gdwarf-2'
-	elseif build == 'release' then
-		compileFlags = compileFlags .. ' -O3'
+	self.objSuffix = '.o'
+	self.libPrefix = 'lib'
+	self.libSuffix = '.so'
+	self.appSuffix = ''
+	self.compiler = 'g++'
+	self.compileFlags = '-c -Wall -fPIC'
+	if self.build == 'debug' then
+		self.compileFlags = self.compileFlags .. ' -O0 -gdwarf-2'
+	elseif self.build == 'release' then
+		self.compileFlags = self.compileFlags .. ' -O3'
 	end
-	compileIncludeFlag = '-I'
-	compileMacroFlag = '-D'
-	compileOutputFlag = '-o '	-- space ... because with msvc there shouldn't be a space
-	compileGetIncludeFilesFlag = '-MM'	-- use -M to get system files as well
-	linker = 'g++'
-	linkLibPathFlag = '-L'
-	linkLibFlag = '-l'
-	linkFlags = ''
-	linkOutputFlag = '-o '
+	self.compileIncludeFlag = '-I'
+	self.compileMacroFlag = '-D'
+	self.compileOutputFlag = '-o '	-- space ... because with msvc there shouldn't be a space
+	self.compileGetIncludeFilesFlag = '-MM'	-- use -M to get system files as well
+	self.linker = 'g++'
+	self.linkLibPathFlag = '-L'
+	self.linkLibFlag = '-l'
+	self.linkFlags = ''
+	self.linkOutputFlag = '-o '
 	GCC.super.preConfig(self)
 end
 
 function GCC:postConfig()
-	compileFlags = compileFlags .. ' -std='..cppver
+	self.compileFlags = self.compileFlags .. ' -std='..self.cppver
 	-- really this is Linux and MinGW specific
-	if platform ~= 'osx' then
-		if distType == 'lib' then
-			linkFlags = linkFlags .. ' -shared'
+	if self.platform ~= 'osx' then
+		if self.distType == 'lib' then
+			self.linkFlags = self.linkFlags .. ' -shared'
 		end
-		if pthread then
-			compileFlags = compileFlags .. ' -pthread'
-			linkFlags = linkFlags .. ' -pthread'
+		if self.pthread then
+			self.compileFlags = self.compileFlags .. ' -pthread'
+			self.linkFlags = self.linkFlags .. ' -pthread'
 		end
-		if distType == 'app' then
-			linkFlags = linkFlags .. ' -Wl,-rpath=lib'
+		if self.distType == 'app' then
+			self.linkFlags = self.linkFlags .. ' -Wl,-rpath=lib'
 		end
 	end
 end
@@ -234,25 +218,25 @@ end
 function GCC:getDependentHeaders(src, obj)
 	-- copied from buildObject ... so maybe borrow that?
 	local cmd = table{
-		compiler,
-		compileFlags,
-	}:append(
-		macros:map(function(macro) return compileMacroFlag..macro end)
-	):append(
-		include:map(function(path) return compileIncludeFlag..self:fixpath(path) end)
-	)
+		self.compiler,
+		self.compileFlags,
+	}:append(self.macros:map(function(macro) 
+		return self.compileMacroFlag..macro 
+	end)):append(self.include:map(function(path) 
+		return self.compileIncludeFlag..self:fixpath(path) 
+	end))
 	--:append{
-	--	compileOutputFlag..self:fixpath(obj),
+	--	self.compileOutputFlag..self:fixpath(obj),
 	--	self:fixpath(src)
 	--}
 	:concat' '
-	..' '..compileGetIncludeFilesFlag..' '..src
+	..' '..self.compileGetIncludeFilesFlag..' '..src
 
-	-- copied from exec() ... so maybe borrow that too?
+	-- copied from self:exec() ... so maybe borrow that too?
 	print('>> '..cmd)
 	local results = io.readproc(cmd)
 	results = results:gsub('\\', ' '):gsub('%s+', '\n')
-	results = results:trim():split'\n'
+	results = string.split(string.trim(results), '\n')
 	local objname = select(2, io.getfiledir(obj))
 	assert(results[1] == objname..':', results[1]..' should be '..objname)
 	results:remove(1)
@@ -265,18 +249,18 @@ end
 local Linux = class(GCC)
 
 function Linux:copyTree(ext, src, dst, must)
-	exec("rsync -avm --include='"..ext.."' -f 'hide,! */' "..src.." "..dst, must)
+	self:exec("rsync -avm --include='"..ext.."' -f 'hide,! */' "..src.." "..dst, must)
 end
 
 function Linux:preConfig()
-	platform = 'linux'		-- TODO make this unique per-environment class
+	self.platform = 'linux'		-- TODO make this unique per-environment class
 	Linux.super.preConfig(self)
 end
 
 function Linux:buildDist(dist, objs)
 	Linux.super.buildDist(self, dist, objs)
 
-	if distType == 'app' then
+	if self.distType == 'app' then
 		--[[
 		-- TODO copy all libs into distdir/lib
 		-- and make sure their rpath is correct
@@ -287,12 +271,12 @@ function Linux:buildDist(dist, objs)
 			local _, name = io.getfiledir(src)
 			local dst = 'dist/'..platform..'/'..build..'/lib/'..name
 			print('copying from '..src..' to '..dst)
-			exec('cp '..src..' '..dst)
+			self:exec('cp '..src..' '..dst)
 		end
 		--]]
 		-- [[ copy res/ folder into the dist folder
 		if io.fileexists'res' then
-			exec('cp -R res/* '..self:getResourcePath(dist), true)
+			self:exec('cp -R res/* '..self:getResourcePath(dist), true)
 			-- TODO
 			-- self:copyTree('*', 'res', self:getResourcePath(dist), true)
 		end
@@ -302,13 +286,13 @@ end
 
 function Linux:addDependLib(dependName, dependDir)
 	--[[ using -l and -L
-	libs:insert(dependName)
-	libpaths:insert(dependDir..'/dist/'..platform..'/'..build)
+	self.libs:insert(dependName)
+	self.libpaths:insert(dependDir..'/dist/'..self.platform..'/'..self.build)
 	--]]
 	-- [[ adding the .so
-	dynamicLibs:insert(1, dependDir..'/dist/'..platform..'/'..build..'/'..libPrefix..dependName..libSuffix)
+	self.dynamicLibs:insert(1, dependDir..'/dist/'..self.platform..'/'..self.build..'/'..self.libPrefix..dependName..self.libSuffix)
 	--]]
-	dependLibs:insert(1, dynamicLibs:last())
+	self.dependLibs:insert(1, self.dynamicLibs:last())
 end
 
 
@@ -317,48 +301,47 @@ local OSX = class(GCC)
 --local OSX = class(GCC, Linux) ?
 
 function OSX:preConfig()
-	platform = 'osx'
+	self.platform = 'osx'
 	OSX.super.preConfig(self)
-	compiler = 'clang++'
+	self.compiler = 'clang++'
 
 	-- TODO verify this
-	compileGetIncludeFilesFlag = '-H -fsyntax-only -MM'	-- I hear without -H it will search for includes *and* compile
+	self.compileGetIncludeFilesFlag = '-H -fsyntax-only -MM'	-- I hear without -H it will search for includes *and* compile
 	
-	linker = 'clang++'
-	libSuffix = '.dylib'
+	self.linker = 'clang++'
+	self.libSuffix = '.dylib'
 end
 
 function OSX:postConfig()
 
 	local dist = self:getDist()
 	local _, distname = io.getfiledir(dist)
-	if distType == 'lib' then	
-		linkFlags = linkFlags .. ' -dynamiclib -undefined suppress -flat_namespace -install_name @rpath/'..distname
+	if self.distType == 'lib' then	
+		self.linkFlags = self.linkFlags .. ' -dynamiclib -undefined suppress -flat_namespace -install_name @rpath/'..distname
 	end
-	if distType == 'app' then
-		linkFlags = linkFlags .. ' -Wl,-headerpad_max_install_names'
+	if self.distType == 'app' then
+		self.linkFlags = self.linkFlags .. ' -Wl,-headerpad_max_install_names'
 	end
 
 	-- TODO always use home?  always use /usr/local?
 	--  how to let the user specify?
-	include:insert(home..'/include')
+	self.include:insert(self.home..'/include')
 	
-	if build == 'debug' then
-		compileFlags = compileFlags .. ' -mfix-and-continue'
+	if self.build == 'debug' then
+		self.compileFlags = self.compileFlags .. ' -mfix-and-continue'
 	end
 	OSX.super.postConfig(self)
 end
 
 function OSX:getDistSuffix(distPrefix)
-	return (distType == 'app'
-		and '.app/Contents/MacOS/'..distPrefix..distName
+	return (self.distType == 'app'
+		and '.app/Contents/MacOS/'..distPrefix..self.distName
 		or '') .. OSX.super.getDistSuffix(self)
 end
 
-local template = require 'template'
 function OSX:buildDist(dist, objs)
 	OSX.super.buildDist(self, dist, objs)
-	if distType == 'app' then
+	if self.distType == 'app' then
 		local distdir, distname = io.getfiledir(dist)
 		file[distdir..'/../PkgInfo'] = 'APPLhect'
 		file[distdir..'/../Info.plist'] = template([[
@@ -402,20 +385,20 @@ function OSX:buildDist(dist, objs)
 	
 		-- copy over Resources
 		if io.fileexists'res' then
-			exec('cp -R res/* '..resDir)
+			self:exec('cp -R res/* '..resDir)
 			-- TODO
 			-- self:copyTree('*', 'res', resDir)
 		end
 
 		-- copy all libs into distdir/lib
 		-- and make sure their rpath is correct
-		for _,src in ipairs(dynamicLibs) do
+		for _,src in ipairs(self.dynamicLibs) do
 			local _, name = io.getfiledir(src)
 			local dst = resLibDir..'/'..name
 			print('copying from '..src..' to '..dst)
-			exec('cp '..src..' '..dst)
-			exec('install_name_tool -change '..src..' \\@executable_path/../Resources/lib/'..name..' '..dist)
-			exec('install_name_tool -change \\@rpath/'..name..' \\@executable_path/../Resources/lib/'..name..' '..dist)
+			self:exec('cp '..src..' '..dst)
+			self:exec('install_name_tool -change '..src..' \\@executable_path/../Resources/lib/'..name..' '..dist)
+			self:exec('install_name_tool -change \\@rpath/'..name..' \\@executable_path/../Resources/lib/'..name..' '..dist)
 		end
 	end
 end
@@ -427,8 +410,8 @@ end
 
 function OSX:addDependLib(dependName, dependDir)
 	-- same as linux:
-	dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..libPrefix..dependName..libSuffix)
-	dependLibs:insert(dynamicLibs:last())
+	self.dynamicLibs:insert(dependDir..'/dist/'..self.platform..'/'..self.build..'/'..self.libPrefix..dependName..self.libSuffix)
+	self.dependLibs:insert(self.dynamicLibs:last())
 end
 
 
@@ -441,7 +424,7 @@ function Windows:fixpath(path)
 end
 
 function Windows:copyTree(ext, src, dst, must)
-	exec('xcopy /Y /E "'..src..'\\'..ext..'" "'..dst..'\\"', must)
+	self:exec('xcopy /Y /E "'..src..'\\'..ext..'" "'..dst..'\\"', must)
 end
 
 function Windows:copyRes(dist)
@@ -451,61 +434,61 @@ function Windows:copyRes(dist)
 end
 
 function Windows:postConfig()
-	include:insert(home..'\\include')
+	self.include:insert(self.home..'\\include')
 end
 
 
 local MinGW = class(GCC, Windows)
 
 function MinGW:preConfig()
-	platform = 'mingw'
+	self.platform = 'mingw'
 	MinGW.super.preConfig(self)
-	appSuffix = '.exe'
-	libPrefix = 'lib'
-	libSuffix = '-static.a'
-	compileGetIncludeFilesFlag = nil
+	self.appSuffix = '.exe'
+	self.libPrefix = 'lib'
+	self.libSuffix = '-static.a'
+	self.compileGetIncludeFilesFlag = nil
 end
 
 function MinGW:addDependLib(dependName, dependDir)
-	dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..libPrefix..dependName..libSuffix)
-	dependLibs:insert(dynamicLibs:last())
+	self.dynamicLibs:insert(dependDir..'/dist/'..self.platform..'/'..self.build..'/'..self.libPrefix..dependName..self.libSuffix)
+	self.dependLibs:insert(self.dynamicLibs:last())
 end
 
 function MinGW:postConfig()
-	include:insert(home..'/include')
+	self.include:insert(self.home..'/include')
 	
-	compileFlags = compileFlags .. ' -std='..cppver
+	self.compileFlags = self.compileFlags .. ' -std='..self.cppver
 	
 	--GCC.postConfig(self)		-- adds link flags and such
-	--compileFlags = compileFlags .. ' -std='..cppver
+	--self.compileFlags = self.compileFlags .. ' -std='..cppver
 
-	if distType == 'app' then
+	if self.distType == 'app' then
 		--libs:insert(1, 'mingw32')
-		libs = table(dependLibs):append(libs)
+		self.libs = table(self.dependLibs):append(self.libs)
 	end
 	--[=[ I never got static *or* dynamic working with g++.exe due to my leaving one method external of the dll...
 	--		so I'm just using ar instead
-	if distType == 'lib' then
-		--linkFlags = linkFlags .. ' -static -Wl,--out-implib,--enable-auto-import,dist/'..platform..'/'..build..'/'..libPrefix..distName..'.a'
-		--compileFlags = compileFlags .. [[ -Wl,--unresolved-symbols=ignore-in-object-files]]
-		--compileFlags = compileFlags .. [[ -Wl,--unresolved-symbols=ignore-in-shared-libs]]
-		--compileFlags = compileFlags .. [[ -Wl,--warn-unresolved-symbols]]
+	if self.distType == 'lib' then
+		--self.linkFlags = self.linkFlags .. ' -static -Wl,--out-implib,--enable-auto-import,dist/'..self.platform..'/'..build..'/'..self.libPrefix..self.distName..'.a'
+		--self.compileFlags = self.compileFlags .. [[ -Wl,--unresolved-symbols=ignore-in-object-files]]
+		--self.compileFlags = self.compileFlags .. [[ -Wl,--unresolved-symbols=ignore-in-shared-libs]]
+		--self.compileFlags = self.compileFlags .. [[ -Wl,--warn-unresolved-symbols]]
 	end
 	--]=]
-	if pthread then
-		compileFlags = compileFlags .. ' -pthread'
-		linkFlags = linkFlags .. ' -pthread'
+	if self.pthread then
+		self.compileFlags = self.compileFlags .. ' -pthread'
+		self.linkFlags = self.linkFlags .. ' -pthread'
 	end
-	--linkFlags = linkFlags .. ' -Wl,--whole-archive'
-	--libs:insert(1, 'mingw32')
+	--self.linkFlags = self.linkFlags .. ' -Wl,--whole-archive'
+	--self.libs:insert(1, 'mingw32')
 end
 
 function MinGW:buildDist(dist, objs)
-	if distType == 'lib' then
+	if self.distType == 'lib' then
 		local distdir = io.getfiledir(dist)
 		self:mkdir(distdir)
 		
-		exec(table{
+		self:exec(table{
 			'ar rcs',
 			dist,
 		}:append(objs):concat' ')
@@ -522,17 +505,17 @@ end
 function MinGW:addDependLib(dependName, dependDir)
 	-- [[ using -l and -L
 	--libs:insert(1, dependName..'-static')
-	libpaths:insert(dependDir..'/dist/'..platform..'/'..build)
-	dependLibs:insert(dependName..'-static')
+	self.libpaths:insert(dependDir..'/dist/'..self.platform..'/'..self.build)
+	self.dependLibs:insert(dependName..'-static')
 	--]]
 	--[[ adding the .so
-	dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..libPrefix..dependName..libSuffix)
-	dependLibs:insert(dynamicLibs:last())
+	self.dynamicLibs:insert(dependDir..'/dist/'..self.platform..'/'..self.build..'/'..self.libPrefix..dependName..self.libSuffix)
+	self.dependLibs:insert(self.dynamicLibs:last())
 	--]]
 end
 
 function MinGW:mkdirCmd(fn)
-	exec([[mkdir ]]..self:fixpath(fn), false)
+	self:exec([[mkdir ]]..self:fixpath(fn), false)
 end
 
 -- [[
@@ -553,34 +536,34 @@ local MSVC = class(Env, Windows)
 MSVC.useStatic = true
 
 function MSVC:preConfig()
-	platform = 'msvc'
-	objSuffix = '.obj'
-	libPrefix = ''
-	libSuffix = '.dll'
-	appSuffix = '.exe'
-	compiler = 'cl.exe'
-	compileFlags = '/nologo /c /EHsc'
+	self.platform = 'msvc'
+	self.objSuffix = '.obj'
+	self.libPrefix = ''
+	self.libSuffix = '.dll'
+	self.appSuffix = '.exe'
+	self.compiler = 'cl.exe'
+	self.compileFlags = '/nologo /c /EHsc'
 	-- no /Wall, because msvc adds extra crap to Wall
-	if build == 'debug' then
-		compileFlags = compileFlags .. ' /Od /Zi'
-	elseif build == 'release' then
-		compileFlags = compileFlags .. ' /O2'
+	if self.build == 'debug' then
+		self.compileFlags = self.compileFlags .. ' /Od /Zi'
+	elseif self.build == 'release' then
+		self.compileFlags = self.compileFlags .. ' /O2'
 	end
-	compileOutputFlag = '/Fo'
-	compileIncludeFlag = '/I'
-	compileMacroFlag = '/D'
+	self.compileOutputFlag = '/Fo'
+	self.compileIncludeFlag = '/I'
+	self.compileMacroFlag = '/D'
 	
 	-- right now this isn't set up to even run.  only GCC compilers do dependency checking.  so TODO test this.
-	compileGetIncludeFilesFlag = '/showIncludes'
+	self.compileGetIncludeFilesFlag = '/showIncludes'
 	
-	linker = 'link.exe'
-	linkLibPathFlag = ''
-	linkLibFlag = ''
-	linkFlags = '/nologo'
-	linkOutputFlag = '/out:'
+	self.linker = 'link.exe'
+	self.linkLibPathFlag = ''
+	self.linkLibFlag = ''
+	self.linkFlags = '/nologo'
+	self.linkOutputFlag = '/out:'
 	MSVC.super.preConfig(self)
 	-- sometimes it works, sometimes it doesn't
-	--macros:insert'_USE_MATH_DEFINES'
+	--self.macros:insert'_USE_MATH_DEFINES'
 end
 
 function MSVC:getSources()
@@ -590,7 +573,7 @@ function MSVC:getSources()
 	-- /force:unresolved requires an entry point
 	-- https://stackoverflow.com/questions/24547536/unresolved-external-symbol-displayed-as-an-error-while-forceunresolved-is-used 
 	-- https://msdn.microsoft.com/en-gb/library/windows/desktop/ms682596%28v=vs.85%29.aspx  
-	if distType == 'lib' then
+	if self.distType == 'lib' then
 		-- hmm, now I need a cleanup ...
 		local tmp = (os.tmpname()..'.cpp'):gsub('\\','/')
 		-- hmm, do i need a .cpp extension?
@@ -619,18 +602,18 @@ f:close()
 end
 
 function MSVC:postConfig()
-	compileFlags = compileFlags .. ' /std:'..cppver
-	if build == 'debug' then
-		compileFlags = compileFlags .. ' /MD'	-- /MT
-	elseif build == 'release' then
-		compileFlags = compileFlags .. ' /MDd'	-- /MTd
+	self.compileFlags = self.compileFlags .. ' /std:'..self.cppver
+	if self.build == 'debug' then
+		self.compileFlags = self.compileFlags .. ' /MD'	-- /MT
+	elseif self.build == 'release' then
+		self.compileFlags = self.compileFlags .. ' /MDd'	-- /MTd
 	end
-	if build == 'debug' then
-		linkFlags = linkFlags .. ' /debug'
+	if self.build == 'debug' then
+		self.linkFlags = self.linkFlags .. ' /debug'
 	end
 
-	if distType == 'app' then
-		linkFlags = linkFlags .. ' /subsystem:console'
+	if self.distType == 'app' then
+		self.linkFlags = self.linkFlags .. ' /subsystem:console'
 	end
 
 	Windows.postConfig(self)
@@ -639,37 +622,37 @@ end
 function MSVC:addDependLib(dependName, dependDir)
 	-- [[ do this if you want all libs to be staticly linked 
 	if self.useStatic then
-		dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..dependName..'-static.lib')
+		self.dynamicLibs:insert(dependDir..'/dist/'..self.platform..'/'..self.build..'/'..dependName..'-static.lib')
 	else
-		dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..dependName..'.lib')
+		self.dynamicLibs:insert(dependDir..'/dist/'..self.platform..'/'..self.build..'/'..dependName..'.lib')
 	end
 	--]]
 end
 
 function MSVC:mkdirCmd(fn)
-	exec('mkdir "'..self:fixpath(fn)..'"', false)
+	self:exec('mkdir "'..self:fixpath(fn)..'"', false)
 end
 
 function MSVC:buildDist(dist, objs)
 	-- technically you can ... but I am avoiding these for now
-	assert(#libpaths == 0, "can't link to libpaths with windows")
+	assert(#self.libpaths == 0, "can't link to libpaths with windows")
 	
 	local distdir = io.getfiledir(dist)
-	if distType == 'lib' then
-		linkFlags = linkFlags .. ' /dll'
+	if self.distType == 'lib' then
+		self.linkFlags = self.linkFlags .. ' /dll'
 	end
 
-	local distbase = distdir..'\\'..distName
+	local distbase = distdir..'\\'..self.distName
 	local dllfile = dist 
 	local pdbName = distbase..'.pdb'
 
-	if distType == 'app' then
-		linkFlags = linkFlags .. ' /pdb:'..self:fixpath(pdbName)
+	if self.distType == 'app' then
+		self.linkFlags = self.linkFlags .. ' /pdb:'..self:fixpath(pdbName)
 
 		self:copyRes(dist)
 
 		MSVC.super.buildDist(self, dist, objs)
-	elseif distType == 'lib' then
+	elseif self.distType == 'lib' then
 		print('building '..dist..' from '..objs:concat' ')
 		local distdir = io.getfiledir(dist)
 		self:mkdir(distdir)
@@ -679,7 +662,7 @@ function MSVC:buildDist(dist, objs)
 			local staticLibFile = distbase..'-static.lib'
 			-- static libs don't need all the pieces until they are linked to an .exe
 			-- so don't bother with libs, libpaths, dynamicLibs
-			exec(table{
+			self:exec(table{
 				'lib.exe',
 				'/nologo',
 				--'/incremental',	-- now gives a warning: unrecognized option
@@ -691,7 +674,7 @@ function MSVC:buildDist(dist, objs)
 		-- Can't do this until I add all the API export/import macros everywhere ...
 		else
 	
-			exec(table{
+			self:exec(table{
 				'link.exe',
 				'/dll',
 	
@@ -710,16 +693,16 @@ but this only works if we have a 'DllMain' function defined ...
 				'/out:'..dllfile,
 				--'/pdb:'..self:fixpath(pdbName),
 			}
-			--:append(libpaths:map(function(libpath) return '/libpath:'..libpath end))
-			--:append(libs:map(function(lib) return lib end))
-			:append(libs)
-			:append(dynamicLibs)
+			--:append(self.libpaths:map(function(libpath) return '/libpath:'..libpath end))
+			--:append(self.libs:map(function(lib) return lib end))
+			:append(self.libs)
+			:append(self.dynamicLibs)
 			:append(objs)
 			:concat' ', true)
 
 			-- [[ 
 			local defSrcFile = distbase..'.def.txt'
-			exec(table{
+			self:exec(table{
 				'dumpbin.exe',
 				'/nologo /exports',
 				dllfile,
@@ -730,13 +713,13 @@ but this only works if we have a 'DllMain' function defined ...
 			-- TODO use this trick: https://stackoverflow.com/questions/9946322/how-to-generate-an-import-library-lib-file-from-a-dll  
 			local deffile = distbase..'.def'
 			file[deffile] = table{
-				'LIBRARY '..distName,
+				'LIBRARY '..self.distName,
 				'EXPORTS',
 			}:concat'\n'
 			--]]
 
 			local dllLibFile = distbase..'.lib'
-			exec(table{
+			self:exec(table{
 					'lib.exe',
 					'/nologo /nodefaultlib /machine:x64',
 					'/def:'..deffile,
@@ -756,12 +739,12 @@ end
 
 function MSVC:clean()
 	-- false in case the dir isnt there
-	exec('rmdir /s /q obj', false)
+	self:exec('rmdir /s /q obj', false)
 end
 
 function MSVC:distclean()
 	-- false in case the dir isnt there
-	exec('rmdir /s /q dist', false)
+	self:exec('rmdir /s /q dist', false)
 end
 
 
@@ -772,56 +755,56 @@ local ClangWindows = class(GCC, Windows)
 --function ClangWindows:fixpath(path) return path end
 
 function ClangWindows:mkdirCmd(fn)
-	exec('mkdir "'..self:fixpath(fn)..'"', false)
+	self:exec('mkdir "'..self:fixpath(fn)..'"', false)
 end
 
 function ClangWindows:preConfig()
 	ClangWindows.super.preConfig(self)
-	platform = 'clang_win'
-	compileFlags = '-c -Wall -Xclang -flto-visibility-public-std'	-- -fPIC complains
-	compiler = 'clang++.exe'
-	compileGetIncludeFilesFlag = '-H -fsyntax-only -MM'	-- just like OSX ... consider a common root for clang compilers?
-	linker = 'clang++.exe'
-	objSuffix = '.o'
-	appSuffix = '.exe'
-	libPrefix = ''
-	libSuffix = '-static.lib'
+	self.platform = 'clang_win'
+	self.compileFlags = '-c -Wall -Xclang -flto-visibility-public-std'	-- -fPIC complains
+	self.compiler = 'clang++.exe'
+	self.compileGetIncludeFilesFlag = '-H -fsyntax-only -MM'	-- just like OSX ... consider a common root for clang compilers?
+	self.linker = 'clang++.exe'
+	self.objSuffix = '.o'
+	self.appSuffix = '.exe'
+	self.libPrefix = ''
+	self.libSuffix = '-static.lib'
 end
 
 function ClangWindows:addDependLib(dependName, dependDir)
-	dynamicLibs:insert(dependDir..'/dist/'..platform..'/'..build..'/'..libPrefix..dependName..libSuffix)
-	dependLibs:insert(dynamicLibs:last())
+	self.dynamicLibs:insert(dependDir..'/dist/'..self.platform..'/'..self.build..'/'..self.libPrefix..dependName..self.libSuffix)
+	self.dependLibs:insert(self.dynamicLibs:last())
 end
 
 function ClangWindows:postConfig()
-	include:insert(home..'/include')
-	compileFlags = compileFlags .. ' -std='..cppver
+	self.include:insert(self.home..'/include')
+	self.compileFlags = self.compileFlags .. ' -std='..self.cppver
 
-	if distType == 'lib' then
-		linkFlags = linkFlags .. ' -static'
+	if self.distType == 'lib' then
+		self.linkFlags = self.linkFlags .. ' -static'
 	end
-	if distType == 'app' then
-		libs = table(dependLibs):append(libs)
+	if self.distType == 'app' then
+		self.libs = table(self.dependLibs):append(self.libs)
 	end
 end
 
 function ClangWindows:buildDist(dist, objs)
 	local distdir = io.getfiledir(dist)
-	if distType == 'lib' then
-		linkFlags = linkFlags .. ' /dll'
+	if self.distType == 'lib' then
+		self.linkFlags = self.linkFlags .. ' /dll'
 	end
 
-	local distbase = distdir..'\\'..distName
+	local distbase = distdir..'\\'..self.distName
 	local dllfile = dist 
 	--local pdbName = distbase..'.pdb'
 
-	if distType == 'app' then
-		--linkFlags = linkFlags .. ' /pdb:'..self:fixpath(pdbName)
+	if self.distType == 'app' then
+		--self.linkFlags = self.linkFlags .. ' /pdb:'..self:fixpath(pdbName)
 
 		self:copyRes(dist)
 
 		ClangWindows.super.buildDist(self, dist, objs)
-	elseif distType == 'lib' then
+	elseif self.distType == 'lib' then
 		print('building '..dist..' from '..objs:concat' ')
 		local distdir = io.getfiledir(dist)
 		self:mkdir(distdir)
@@ -830,11 +813,11 @@ function ClangWindows:buildDist(dist, objs)
 		local staticLibFile = distbase..'-static.lib'
 		-- static libs don't need all the pieces until they are linked to an .exe
 		-- so don't bother with libs, libpaths, dynamicLibs
-		exec(table{
+		self:exec(table{
 			'llvm-lib.exe',
 			'/nologo',
 			--'/nodefaultlib',	-- llvm-lib can't handle this
-			'/out:'..self:fixpath(staticLibFile),
+			'/out:'..self:fixpath(self.staticLibFile),
 		}:append(objs):concat' ', true)
 --]=]
 	end
@@ -847,14 +830,15 @@ local ClangWindows = class(MSVC)
 
 function ClangWindows:preConfig()
 	ClangWindows.super.preConfig(self)
-	platform = 'clang_win'
-	compiler = 'clang-cl.exe'
+	self.platform = 'clang_win'
+	self.compiler = 'clang-cl.exe'
 end
 --]==]
 
 
---local env -- make it a global
+-- here's where `-e "platform='gcc'"` comes into play
 local detect = platform or require 'make.detect'()
+local env
 if detect == 'linux' then
 	env = Linux()
 elseif detect == 'msvc' then
@@ -869,6 +853,9 @@ else
 	error("unknown environment: "..detect)
 end
 print("using environment: "..detect)
+
+env.home = os.getenv'HOME' or os.getenv'USERPROFILE'
+
 
 local lfs
 do
@@ -908,7 +895,7 @@ local function needsUpdate(target, depends)
 		return true
 	end
 
-	local date = os.date:bind'%Y-%m-%d %H:%M:%S'
+	local date = function(...) return os.date('%Y-%m-%d %H:%M:%S', ...) end
 	print('target up-to-date: '..target
 		..' ('..date(targetAttr.modification)
 		..' vs '..date(dependModification)
@@ -919,57 +906,68 @@ end
 local function doBuild(args)
 	args = args or {}
 	for _,_build in ipairs(args.buildTypes or {'debug', 'release'}) do
-		build = _build
-		print('building '..build)	
+		env.build = _build
+		print('building '..env.build)
 		
-		distName = nil
-		distType = nil
-		depends = table()
+		env.distName = nil
+		env.distType = nil
+		env.depends = table()
 		
-		cppver = 'c++17'
+		env.cppver = 'c++17'
 
 		env:preConfig()
 		
-		cwd = '.'
-		assert(loadfile('buildinfo', 'bt', _G))()
-		assert(distName)
-		assert(distType)
+		env.cwd = '.'
+		local loadenv = setmetatable({}, {
+			__index = function(t,k)
+				local v = env[k] if v ~= nil then return v end
+				local v = _G[k] if v ~= nil then return v end
+				return nil
+			end,
+			__newindex = function(t,k,v)
+				env[k] = v
+			end,
+		})
+		
+		assert(loadfile('buildinfo', 'bt', loadenv))()
+		assert(env.distName)
+		assert(env.distType)
 
-		for _,dependDir in ipairs(depends) do
-			cwd = dependDir
-			local push_distName = distName
-			local push_distType = distType
-			local push_depends = depends
+		for _,dependDir in ipairs(env.depends) do
+			env.cwd = dependDir
+			local push_distName = env.distName
+			local push_distType = env.distType
+			local push_depends = env.depends
 			-- hmm, I should think this system through more ...
 			-- in order to allow include buildinfos to modify state (and include things like macros, search paths, etc)
 			-- I shouldn't be pushing/popping them
 			-- but instead, check 'including' to see if a variable should be modified ...
 			--local push_macros = macros
 
-			distName = nil
-			distType = nil
-			depends = table()
-			including = true
-			--resetMacros()
+			env.distName = nil
+			env.distType = nil
+			env.depends = table()
+			env.including = true
+			--env:resetMacros()
 
-			assert(loadfile(cwd..'/buildinfo', 'bt', _G))()
-			local dependName = distName	
-			assert(distType == 'lib' or distType == 'inc')	--otherwise why are we dependent on it?
-			include:insert(cwd..'/include')
-			if (platform == 'linux' and distType == 'lib' and push_distType == 'app')
-			or (platform == 'osx' and distType == 'lib')
-			or (platform == 'msvc' and distType ~= 'inc')
-			or (platform == 'mingw' and distType ~= 'inc')
-			or (platform == 'clang_win' and distType ~= 'inc')
+			assert(loadfile(env.cwd..'/buildinfo', 'bt', loadenv))()
+			local dependName = env.distName
+			assert(env.distType == 'lib' or env.distType == 'inc')	--otherwise why are we dependent on it?
+			env.include:insert(env.cwd..'/include')
+			if (env.platform == 'linux' and env.distType == 'lib' and push_distType == 'app')
+			or (env.platform == 'osx' and env.distType == 'lib')
+			or (env.platform == 'msvc' and env.distType ~= 'inc')
+			or (env.platform == 'mingw' and env.distType ~= 'inc')
+			or (env.platform == 'clang_win' and env.distType ~= 'inc')
 			then
-				env:addDependLib(dependName, cwd)
+				env:addDependLib(dependName, env.cwd)
 			end
 			
 			--macros = push_macros
-			distName = push_distName
-			distType = push_distType
-			depends = push_depends
-			including = nil
+			env.distName = push_distName
+			env.distType = push_distType
+			env.depends = push_depends
+			env.including = nil
 		end
 
 		env:postConfig()
@@ -980,8 +978,8 @@ local function doBuild(args)
 			print'no input files found'
 		else
 			local objs = srcs:map(function(f)
-				f = f:gsub('^src/', 'obj/'..platform..'/'..build..'/')
-				f = f:gsub('%.cpp$', objSuffix)
+				f = f:gsub('^src/', 'obj/'..env.platform..'/'..env.build..'/')
+				f = f:gsub('%.cpp$', env.objSuffix)
 				return f
 			end)
 			local headers = find('include')	-- TODO find alll include
@@ -1017,8 +1015,8 @@ os.exit()
 			end
 
 			-- if postBuildDist is defined then do that too
-			if postBuildDist then
-				postBuildDist(env:getResourcePath(dist))
+			if env.postBuildDist then
+				env.postBuildDist(env:getResourcePath(dist))
 			end
 		end
 	end

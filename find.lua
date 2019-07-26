@@ -1,3 +1,4 @@
+local file = require 'ext.file'
 local table = require 'ext.table'
 local io = require 'ext.io'
 

@@ -1,6 +1,7 @@
+local string = require 'ext.string'
 local function detect()
 	local h = io.popen'uname'
-	local uname = (h:read'a' or ''):split'\n'[1]:lower()
+	local uname = string.split(h:read'a' or '', '\n')[1]:lower()
 	if uname == 'linux' then
 		-- TODO clang_linux vs gcc_linux ?
 		return 'linux'
