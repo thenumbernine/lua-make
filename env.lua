@@ -1,6 +1,7 @@
 local class = require 'ext.class'
-local io = require 'ext.io'
 local table = require 'ext.table'
+local file = require 'ext.file'
+local io = require 'ext.io'
 local find = require 'make.find'
 local exec = require 'make.exec'
 local template = require 'template'
@@ -64,7 +65,7 @@ function Env:buildObj(obj, src)
 -- TODO make Env:postConfig and put this in it 
 self.macros:insert('distName_'..self.distName)
 	
-	self:mkdir(io.getfiledir(obj))
+	self:mkdir(io.getfiledir(obj) or '.')
 	self:exec(
 		table{
 			self.compiler,
@@ -86,6 +87,7 @@ self.macros:insert('distName_'..self.distName)
 			self:fixpath(src)
 		}:concat' '
 	)
+	return true	-- TODO ,log
 end
 
 function Env:getDistSuffix()
@@ -94,7 +96,7 @@ end
 
 function Env:buildDist(dist, objs)	
 	print('building '..dist..' from '..objs:concat' ')	
-	local distdir = io.getfiledir(dist)
+	local distdir = io.getfiledir(dist) or '.'
 	self:mkdir(distdir)
 	self:exec(
 		table{self.linker, self.linkFlags}
@@ -104,6 +106,7 @@ function Env:buildDist(dist, objs)
 		:append(self.dynamicLibs:map(function(dynlib) return self:fixpath(dynlib) end))
 		:append{self.linkOutputFlag..self:fixpath(dist)}
 		:concat' ', true)
+	return true	-- TODO ,log
 end
 
 function Env:getDist()
@@ -219,14 +222,14 @@ function Linux:preConfig()
 end
 
 function Linux:buildDist(dist, objs)
-	Linux.super.buildDist(self, dist, objs)
-
+	local status, log = Linux.super.buildDist(self, dist, objs)
+	if not status then return status end
 	if self.distType == 'app' then
 		--[[
 		-- TODO copy all libs into distdir/lib
 		-- and make sure their rpath is correct
 		-- or go the windows route and just static link everything
-		local distdir = io.getfiledir(dist)
+		local distdir = io.getfiledir(dist) or '.'
 		self:mkdir(distdir..'/lib')
 		for _,src in ipairs(dependLibs) do
 			local _, name = io.getfiledir(src)
@@ -243,6 +246,7 @@ function Linux:buildDist(dist, objs)
 		end
 		--]]
 	end
+	return status, log
 end
 
 function Linux:addDependLib(dependName, dependDir)
@@ -303,9 +307,11 @@ function OSX:getDistSuffix(distPrefix)
 end
 
 function OSX:buildDist(dist, objs)
-	OSX.super.buildDist(self, dist, objs)
+	local status, log = OSX.super.buildDist(self, dist, objs)
+	if not status then return status end
 	if self.distType == 'app' then
 		local distdir, distname = io.getfiledir(dist)
+		distdir = distdir or '.'
 		file[distdir..'/../PkgInfo'] = 'APPLhect'
 		file[distdir..'/../Info.plist'] = template([[
 <?='<'..'?'?>xml version="1.0" encoding="UTF-8"<?='?'..'>'?>
@@ -364,10 +370,11 @@ function OSX:buildDist(dist, objs)
 			self:exec('install_name_tool -change \\@rpath/'..name..' \\@executable_path/../Resources/lib/'..name..' '..dist)
 		end
 	end
+	return status	--, log
 end
 
 function OSX:getResourcePath(dist)
-	local distdir = io.getfiledir(dist)
+	local distdir = io.getfiledir(dist) or '.'
 	return distdir..'/../Resources'
 end
 
@@ -449,7 +456,7 @@ end
 
 function MinGW:buildDist(dist, objs)
 	if self.distType == 'lib' then
-		local distdir = io.getfiledir(dist)
+		local distdir = io.getfiledir(dist) or '.'
 		self:mkdir(distdir)
 		
 		self:exec(table{
@@ -459,11 +466,13 @@ function MinGW:buildDist(dist, objs)
 		return
 	end
 
-	MinGW.super.buildDist(self, dist, objs)
+	local status, log = MinGW.super.buildDist(self, dist, objs)
 	
 	if distType == 'app' then
 		self:copyRes(dist)
 	end
+
+	return status, log
 end
 
 function MinGW:addDependLib(dependName, dependDir)
@@ -602,7 +611,7 @@ function MSVC:buildDist(dist, objs)
 	-- technically you can ... but I am avoiding these for now
 	assert(#self.libpaths == 0, "can't link to libpaths with windows")
 	
-	local distdir = io.getfiledir(dist)
+	local distdir = io.getfiledir(dist) or '.'
 	if self.distType == 'lib' then
 		self.linkFlags = self.linkFlags .. ' /dll'
 	end
@@ -611,15 +620,16 @@ function MSVC:buildDist(dist, objs)
 	local dllfile = dist 
 	local pdbName = distbase..'.pdb'
 
+	local status, log
 	if self.distType == 'app' then
 		self.linkFlags = self.linkFlags .. ' /pdb:'..self:fixpath(pdbName)
 
 		self:copyRes(dist)
 
-		MSVC.super.buildDist(self, dist, objs)
+		status, log = MSVC.super.buildDist(self, dist, objs)
 	elseif self.distType == 'lib' then
-		print('building '..dist..' from '..objs:concat' ')
-		local distdir = io.getfiledir(dist)
+		print('building '..dist..' from '..table.concat(objs, ' '))
+		local distdir = io.getfiledir(dist) or '.'
 		self:mkdir(distdir)
 
 		-- build the static lib
@@ -638,9 +648,9 @@ function MSVC:buildDist(dist, objs)
 		-- building DLLs.  
 		-- Can't do this until I add all the API export/import macros everywhere ...
 		else
-	
 			self:exec(table{
 				'link.exe',
+				'/nologo',
 				'/dll',
 	
 --[=[
@@ -694,12 +704,16 @@ but this only works if we have a 'DllMain' function defined ...
 				:concat' '
 			, true)
 		end
+	else
+		error("unknown distType "..require'ext.tolua'(self.distType))
 	end
 
 	if io.fileexists'vc140.pdb' then
 		print("you made a pdb you weren't expecting for build "..distdir)
 		os.remove'vc140.pdb'
 	end
+
+	return true	-- TODO ,log
 end
 
 function MSVC:clean()
@@ -755,7 +769,7 @@ function ClangWindows:postConfig()
 end
 
 function ClangWindows:buildDist(dist, objs)
-	local distdir = io.getfiledir(dist)
+	local distdir = io.getfiledir(dist) or '.'
 	if self.distType == 'lib' then
 		self.linkFlags = self.linkFlags .. ' /dll'
 	end
@@ -772,7 +786,7 @@ function ClangWindows:buildDist(dist, objs)
 		ClangWindows.super.buildDist(self, dist, objs)
 	elseif self.distType == 'lib' then
 		print('building '..dist..' from '..objs:concat' ')
-		local distdir = io.getfiledir(dist)
+		local distdir = io.getfiledir(dist) or '.'
 		self:mkdir(distdir)
 
 -- [=[	-- build the static lib
@@ -787,6 +801,7 @@ function ClangWindows:buildDist(dist, objs)
 		}:append(objs):concat' ', true)
 --]=]
 	end
+	return true	-- TODO ,log
 end
 --]==]
 
