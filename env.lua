@@ -185,6 +185,12 @@ function GCC:getDependentHeaders(src, obj)
 		self.compiler,
 		self.compileFlags,
 	}:append(self.macros:map(function(macro) 
+		
+		-- matches Env:buildObj
+		if macro:find' ' or macro:find'"' then
+			return self.compileMacroFlag..'"'..macro:gsub('"', '\\"')..'"'
+		end
+		
 		return self.compileMacroFlag..macro 
 	end)):append(self.include:map(function(path) 
 		return self.compileIncludeFlag..self:fixpath(path) 
