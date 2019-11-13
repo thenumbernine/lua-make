@@ -221,11 +221,10 @@ os.exit()
 end
 
 local cmds = {...}
-if #cmds == 0 then cmds = {'all'} end
+if #cmds == 0 then cmds = {'debug'} end	-- build just debug by default
 for _,cmd in ipairs(cmds) do
 	if cmd == 'all' then
-		--doBuild()	-- build debug and release
-		doBuild{buildTypes={'debug'}}	-- build just debug by default
+		doBuild{buildTypes={'debug', 'release'}}
 	elseif cmd == 'debug' or cmd == 'release' then
 		doBuild{buildTypes={cmd}}
 	elseif cmd == 'clean' then
