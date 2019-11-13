@@ -112,6 +112,7 @@ local function doBuild(args)
 		
 		env.cppver = 'c++17'
 
+		env.env = env
 		env:preConfig()
 		
 		env.cwd = '.'
@@ -223,7 +224,8 @@ local cmds = {...}
 if #cmds == 0 then cmds = {'all'} end
 for _,cmd in ipairs(cmds) do
 	if cmd == 'all' then
-		doBuild()
+		--doBuild()	-- build debug and release
+		doBuild{buildTypes={'release'}}	-- build just release by default
 	elseif cmd == 'debug' or cmd == 'release' then
 		doBuild{buildTypes={cmd}}
 	elseif cmd == 'clean' then
