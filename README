@@ -33,6 +33,20 @@ where $PLATFORM can be:
 	mingw
 	msvc
 
+or if you want a bit better shell access to run this, make this file:
+lmake:
+	#!/usr/bin/env sh
+	lua ~/path/to/make/run.lua "$@"
+
+and run it with the following arguments:
+	lmake clean = cleans objects
+	lmake distclean = cleans executable
+	lmake = builds default configuration
+	lmake all = builds debug and release
+	lmake debug = builds debug
+	lmake release = builds release
+	lmake distonly = builds dist from objs only
+
 Alright I want to use this in other scripts, 
 The specific Make subclass needs to be selected by the OS.
 The compile cpp to obj and obj to app commands need to be callable from outside.

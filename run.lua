@@ -225,7 +225,7 @@ if #cmds == 0 then cmds = {'all'} end
 for _,cmd in ipairs(cmds) do
 	if cmd == 'all' then
 		--doBuild()	-- build debug and release
-		doBuild{buildTypes={'release'}}	-- build just release by default
+		doBuild{buildTypes={'debug'}}	-- build just debug by default
 	elseif cmd == 'debug' or cmd == 'release' then
 		doBuild{buildTypes={cmd}}
 	elseif cmd == 'clean' then
