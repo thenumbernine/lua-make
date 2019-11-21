@@ -18,8 +18,8 @@ function Env:fixpath(s) return s end
 
 function Env:resetMacros()
 	self.macros = table{
-		'PLATFORM_'..self.platform,
-		'BUILD_'..self.build,
+		'PLATFORM_'..self.platform:upper(),
+		'BUILD_'..self.build:upper(),
 	}
 	if self.build == 'debug' then self.macros:insert'DEBUG' end
 	if self.build == 'release' then self.macros:insert'NDEBUG' end
