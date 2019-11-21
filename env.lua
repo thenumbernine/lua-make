@@ -37,7 +37,7 @@ function Env:preConfig()
 end
 
 function Env:postConfig()
-	self.macros:insert('distName_'..self.distName)
+	self.macros:insert('DIST_NAME_'..self.distName:upper())
 end
 
 function Env:exec(cmd, must)
