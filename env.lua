@@ -36,6 +36,10 @@ function Env:preConfig()
 	self.dynamicLibs = table()
 end
 
+function Env:postConfig()
+	self.macros:insert('distName_'..self.distName)
+end
+
 function Env:exec(cmd, must)
 	return exec(cmd, must, self.platform)
 end
@@ -62,10 +66,7 @@ end
 
 function Env:buildObj(obj, src)
 	print('building '..obj..' from '..src)
-	
--- TODO make Env:postConfig and put this in it 
-self.macros:insert('distName_'..self.distName)
-	
+
 	self:mkdir(io.getfiledir(obj) or '.')
 	self:exec(
 		table{
@@ -177,6 +178,7 @@ function GCC:postConfig()
 			self.linkFlags = self.linkFlags .. ' -Wl,-rpath=lib'
 		end
 	end
+	GCC.super.postConfig(self)
 end
 
 function GCC:getDependentHeaders(src, obj)
@@ -287,7 +289,6 @@ function OSX:preConfig()
 end
 
 function OSX:postConfig()
-
 	local dist = self:getDist()
 	local _, distname = io.getfiledir(dist)
 	if self.distType == 'lib' then	
@@ -436,7 +437,8 @@ function MinGW:postConfig()
 	self.include:insert(self.home..'/include')
 	
 	self.compileFlags = self.compileFlags .. ' -std='..self.cppver
-	
+
+	Env.postConfig(self)		-- adds DIST_NAME_ macro
 	--GCC.postConfig(self)		-- adds link flags and such
 	--self.compileFlags = self.compileFlags .. ' -std='..cppver
 
@@ -596,7 +598,7 @@ function MSVC:postConfig()
 	if self.distType == 'app' then
 		self.linkFlags = self.linkFlags .. ' /subsystem:console'
 	end
-
+	Env.postConfig(self)
 	Windows.postConfig(self)
 end
 
@@ -773,6 +775,7 @@ function ClangWindows:postConfig()
 	if self.distType == 'app' then
 		self.libs = table(self.dependLibs):append(self.libs)
 	end
+	Env.postConfig(self)
 end
 
 function ClangWindows:buildDist(dist, objs)
