@@ -150,7 +150,7 @@ local function doBuild(args)
 
 			assert(loadfile(env.cwd..'/buildinfo', 'bt', loadenv))()
 			local dependName = env.distName
-			assert(env.distType == 'lib' or env.distType == 'inc')	--otherwise why are we dependent on it?
+--			assert(env.distType == 'lib' or env.distType == 'inc')	--otherwise why are we dependent on it? ... hmm, how about unit tests for applications.
 			env.include:insert(env.cwd..'/include')
 			if (env.platform == 'linux' and env.distType == 'lib' and push_distType == 'app')
 			or (env.platform == 'osx' and env.distType == 'lib')

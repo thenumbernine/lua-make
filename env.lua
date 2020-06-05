@@ -104,8 +104,8 @@ function Env:buildDist(dist, objs)
 		table{self.linker, self.linkFlags}
 		:append(objs:map(function(obj) return self:fixpath(obj) end))
 		:append(self.libpaths:map(function(libpath) return self:fixpath(self.linkLibPathFlag..libpath) end))
-		:append(self.libs:map(function(lib) return self.linkLibFlag..lib end))
 		:append(self.dynamicLibs:map(function(dynlib) return self:fixpath(dynlib) end))
+		:append(self.libs:map(function(lib) return self.linkLibFlag..lib end))
 		:append{self.linkOutputFlag..self:fixpath(dist)}
 		:concat' ', true)
 	return true	-- TODO ,log
@@ -259,11 +259,11 @@ function Linux:buildDist(dist, objs)
 end
 
 function Linux:addDependLib(dependName, dependDir)
-	--[[ using -l and -L
-	self.libs:insert(dependName)
-	self.libpaths:insert(dependDir..'/dist/'..self.platform..'/'..self.build)
+	-- [[ using -l and -L
+	self.libs:insert(1, dependName)
+	self.libpaths:insert(1, dependDir..'/dist/'..self.platform..'/'..self.build)
 	--]]
-	-- [[ adding the .so
+	--[[ adding the .so
 	self.dynamicLibs:insert(1, dependDir..'/dist/'..self.platform..'/'..self.build..'/'..self.libPrefix..dependName..self.libSuffix)
 	--]]
 	self.dependLibs:insert(1, self.dynamicLibs:last())
