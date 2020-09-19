@@ -2,6 +2,7 @@ local class = require 'ext.class'
 local table = require 'ext.table'
 local file = require 'ext.file'
 local io = require 'ext.io'
+local os = require 'ext.os'
 local string = require 'ext.string'
 local find = require 'make.find'
 local exec = require 'make.exec'
@@ -44,15 +45,11 @@ function Env:exec(cmd, must)
 	return exec(cmd, must, self.platform)
 end
 
-function Env:mkdirCmd(fn)
-	self:exec('mkdir -p '..fn, false)
-end
-
 function Env:mkdir(fn)
-	if io.fileexists(fn) then
-		assert(io.isdir(fn), "tried to mkdir on a file that is not a directory")
+	if os.fileexists(fn) then
+		assert(os.isdir(fn), "tried to mkdir on a file that is not a directory")
 	else
-		self:mkdirCmd(fn)
+		os.mkdir(fn)
 	end
 end
 
@@ -234,21 +231,19 @@ function Linux:buildDist(dist, objs)
 	local status, log = Linux.super.buildDist(self, dist, objs)
 	if not status then return status end
 	if self.distType == 'app' then
-		--[[
-		-- TODO copy all libs into distdir/lib
-		-- and make sure their rpath is correct
-		-- or go the windows route and just static link everything
+		-- [[ copy all libs into distdir
+		-- don't change rpath
+		-- this way the app can be run from dist/linux/$build 
 		local distdir = io.getfiledir(dist) or '.'
-		self:mkdir(distdir..'/lib')
-		for _,src in ipairs(dependLibs) do
+		for _,src in ipairs(self.dependLibs) do
 			local _, name = io.getfiledir(src)
-			local dst = 'dist/'..platform..'/'..build..'/lib/'..name
+			local dst = distdir..'/'..name
 			print('copying from '..src..' to '..dst)
 			self:exec('cp '..src..' '..dst)
 		end
 		--]]
 		-- [[ copy res/ folder into the dist folder
-		if io.fileexists'res' then
+		if os.fileexists'res' then
 			self:exec('cp -R res/* '..self:getResourcePath(dist), true)
 			-- TODO
 			-- self:copyTree('*', 'res', self:getResourcePath(dist), true)
@@ -259,15 +254,30 @@ function Linux:buildDist(dist, objs)
 end
 
 function Linux:addDependLib(dependName, dependDir)
+	local deplibname = self.libPrefix..dependName..self.libSuffix
+	local deplibdir = dependDir..'/dist/'..self.platform..'/'..self.build
+	local deplib = deplibdir..'/'..deplibname
 	-- [[ using -l and -L
 	self.libs:insert(1, dependName)
-	self.libpaths:insert(1, dependDir..'/dist/'..self.platform..'/'..self.build)
+	self.libpaths:insert(1, deplibdir)
 	--]]
-	--[[ adding the .so
-	self.dynamicLibs:insert(1, dependDir..'/dist/'..self.platform..'/'..self.build..'/'..self.libPrefix..dependName..self.libSuffix)
+	--[[ adding the .so and copying to dist path
+	self.dynamicLibs:insert(1, deplib)
 	--]]
-	self.dependLibs:insert(1, self.dynamicLibs:last())
+	self.dependLibs:insert(1, deplib)
 end
+
+--[[ if you're using -l -L then the .so path isn't baked into the .exe and you have a few options on how to get the binary to run:
+-- 1) modify LD_LIBRARY_PATH every time you run it.  maybe do a 'lmake run'?  but windows and osx don't need this.
+-- 2) install your .so's every time you build them
+-- 3) cheap hack for now: copy them to the cwd.
+function Linux:postBuildDist(env)
+	for _,dep in ipairs(self.depends) do
+		local srcname = dep..'/dist/linux/release/'.. -- read the target info from the buildinfo from the dep
+		self:exec('cp "'..srcname..'" .')
+	end
+end
+--]]
 
 
 local OSX = class(GCC)
@@ -361,7 +371,7 @@ function OSX:buildDist(dist, objs)
 		self:mkdir(resLibDir)
 	
 		-- copy over Resources
-		if io.fileexists'res' then
+		if os.fileexists'res' then
 			self:exec('cp -R res/* '..resDir)
 			-- TODO
 			-- self:copyTree('*', 'res', resDir)
@@ -406,7 +416,7 @@ function Windows:copyTree(ext, src, dst, must)
 end
 
 function Windows:copyRes(dist)
-	if io.fileexists'res' then
+	if os.fileexists'res' then
 		self:copyTree('*', 'res', self:fixpath(self:getResourcePath(dist)), true)
 	end
 end
@@ -494,10 +504,6 @@ function MinGW:addDependLib(dependName, dependDir)
 	self.dynamicLibs:insert(dependDir..'/dist/'..self.platform..'/'..self.build..'/'..self.libPrefix..dependName..self.libSuffix)
 	self.dependLibs:insert(self.dynamicLibs:last())
 	--]]
-end
-
-function MinGW:mkdirCmd(fn)
-	self:exec([[mkdir ]]..self:fixpath(fn), false)
 end
 
 -- [[
@@ -612,10 +618,6 @@ function MSVC:addDependLib(dependName, dependDir)
 	--]]
 end
 
-function MSVC:mkdirCmd(fn)
-	self:exec('mkdir "'..self:fixpath(fn)..'"', false)
-end
-
 function MSVC:buildDist(dist, objs)
 	-- technically you can ... but I am avoiding these for now
 	assert(#self.libpaths == 0, "can't link to libpaths with windows")
@@ -717,7 +719,7 @@ but this only works if we have a 'DllMain' function defined ...
 		error("unknown distType "..require'ext.tolua'(self.distType))
 	end
 
-	if io.fileexists'vc140.pdb' then
+	if os.fileexists'vc140.pdb' then
 		print("you made a pdb you weren't expecting for build "..distdir)
 		os.remove'vc140.pdb'
 	end
@@ -742,10 +744,6 @@ ClangWindows.name = 'clang_win'
 
 -- don't swap /'s with \'s
 --function ClangWindows:fixpath(path) return path end
-
-function ClangWindows:mkdirCmd(fn)
-	self:exec('mkdir "'..self:fixpath(fn)..'"', false)
-end
 
 function ClangWindows:preConfig()
 	ClangWindows.super.preConfig(self)

@@ -27,6 +27,7 @@ compileIncludeFlag = flag for include directory.
 compileMacroFlag = flag for C++ macros.
 compileOutputFlag = flag for output filename.
 compileGetIncludeFilesFlag = flag for getting include files referenced by this file
+including = flag set if this bulidinfo is being interpreted from another buildinfo
 linker = linker binary name.
 linkLibPathFlag = flag for adding library search paths.
 linkLibFlag = flag for adding libraries.
@@ -44,7 +45,7 @@ dynamicLibs
 	on windows this is .lib files associated with .dll files (as opposed to the .lib files that are static libraries ... smh windows)
 --]]
 
-local io = require 'ext.io'
+local os = require 'ext.os'
 local table = require 'ext.table'
 local find = require 'make.find'
 
@@ -66,7 +67,7 @@ end
 
 local function needsUpdate(target, depends)
 	if not lfs then return true end
-	if not io.fileexists(target) then return true end
+	if not os.fileexists(target) then return true end
 	
 	local targetAttr = lfs.attributes(target)
 	if not targetAttr then return true end
@@ -132,6 +133,8 @@ local function doBuild(args)
 		assert(env.distType)
 
 		for _,dependDir in ipairs(env.depends) do
+			-- TODO make a function for loading depend info
+			-- esp so I can derive the depend target from the buildinfo
 			env.cwd = dependDir
 			local push_distName = env.distName
 			local push_distType = env.distType
@@ -214,7 +217,7 @@ os.exit()
 
 			-- if postBuildDist is defined then do that too
 			if env.postBuildDist then
-				env.postBuildDist(env:getResourcePath(dist))
+				env:postBuildDist(env:getResourcePath(dist))
 			end
 		end
 	end
@@ -233,6 +236,7 @@ for _,cmd in ipairs(cmds) do
 		env:distclean()
 	elseif cmd == 'distonly' then
 		doBuild{distonly=true}
+	-- TODO 'run' for building a LD_LIBRARY_PATH of all the dependent projects (so you don't have to install and don't have to copy the libs it is dependent on)
 	else
 		error('unknown command: '..cmd)
 	end
