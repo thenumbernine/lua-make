@@ -48,10 +48,11 @@ dynamicLibs
 local os = require 'ext.os'
 local table = require 'ext.table'
 local find = require 'make.find'
+local exec = require 'make.exec'
 
 -- this either looks at global 'platform' or runs make.detect 
-local MakeEnv = require 'make.env'
-local env = MakeEnv()
+local Env = require 'make.env'
+local env = Env()
 print("using environment: "..env.name)
 
 
@@ -171,11 +172,21 @@ for _,cmd in ipairs(cmds) do
 		doBuild{distonly=true}
 	-- TODO 'run' for building a LD_LIBRARY_PATH of all the dependent projects (so you don't have to install and don't have to copy the libs it is dependent on)
 	elseif cmd == 'depends' then
-		local cmdargs = table{...}
+		local cmdargs = table(cmds)
 		cmdargs:removeObject'depends'
-		for _,depend in ipairs(env.depends) do
+		
+		-- TODO set up for each debug/release buildType and recurse into dependencies separately
+		-- until then, I'll just gather for one specific build type and recurse through those and reissue all 
+		local depends
+		do
+			tmpenv = Env()
+			tmpenv:setupBuild'debug'
+			depends = tmpenv.depends
+		end
+		
+		for _,depend in ipairs(depends) do
 			-- TODO forward all args, with spaces, etc
-			assert(exec('cd "'..depend..'" && lmake '..cmdargs:mapi(function(s) return ('%q'):format(s) end):concat' '))
+			env:exec('cd "'..depend..'" && lmake '..cmdargs:mapi(function(s) return ('%q'):format(s) end):concat' ', true)
 		end
 	else
 		error('unknown command: '..cmd)
