@@ -49,7 +49,7 @@ function Env:mkdir(fn)
 	if os.fileexists(fn) then
 		assert(os.isdir(fn), "tried to mkdir on a file that is not a directory")
 	else
-		os.mkdir(fn)
+		os.mkdir(fn, true)
 	end
 end
 
