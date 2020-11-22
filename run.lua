@@ -104,74 +104,7 @@ end
 local function doBuild(args)
 	args = args or {}
 	for _,_build in ipairs(args.buildTypes or {'debug', 'release'}) do
-		env.build = _build
-		print('building '..env.build)
-		
-		env.distName = nil
-		env.distType = nil
-		env.depends = table()
-		
-		env.cppver = 'c++17'
-
-		env.env = env
-		env:preConfig()
-		
-		env.cwd = '.'
-		local loadenv = setmetatable({}, {
-			__index = function(t,k)
-				local v = env[k] if v ~= nil then return v end
-				local v = _G[k] if v ~= nil then return v end
-				return nil
-			end,
-			__newindex = function(t,k,v)
-				env[k] = v
-			end,
-		})
-		
-		assert(loadfile('buildinfo', 'bt', loadenv))()
-		assert(env.distName)
-		assert(env.distType)
-
-		for _,dependDir in ipairs(env.depends) do
-			-- TODO make a function for loading depend info
-			-- esp so I can derive the depend target from the buildinfo
-			env.cwd = dependDir
-			local push_distName = env.distName
-			local push_distType = env.distType
-			local push_depends = env.depends
-			-- hmm, I should think this system through more ...
-			-- in order to allow include buildinfos to modify state (and include things like macros, search paths, etc)
-			-- I shouldn't be pushing/popping them
-			-- but instead, check 'including' to see if a variable should be modified ...
-			--local push_macros = macros
-
-			env.distName = nil
-			env.distType = nil
-			env.depends = table()
-			env.including = true
-			--env:resetMacros()
-
-			assert(loadfile(env.cwd..'/buildinfo', 'bt', loadenv))()
-			local dependName = env.distName
---			assert(env.distType == 'lib' or env.distType == 'inc')	--otherwise why are we dependent on it? ... hmm, how about unit tests for applications.
-			env.include:insert(env.cwd..'/include')
-			if (env.platform == 'linux' and env.distType == 'lib' and push_distType == 'app')
-			or (env.platform == 'osx' and env.distType == 'lib')
-			or (env.platform == 'msvc' and env.distType ~= 'inc')
-			or (env.platform == 'mingw' and env.distType ~= 'inc')
-			or (env.platform == 'clang_win' and env.distType ~= 'inc')
-			then
-				env:addDependLib(dependName, env.cwd)
-			end
-			
-			--macros = push_macros
-			env.distName = push_distName
-			env.distType = push_distType
-			env.depends = push_depends
-			env.including = nil
-		end
-
-		env:postConfig()
+		env:setupBuild(_build)
 		
 		-- determine source files
 		local srcs = env:getSources()
@@ -217,7 +150,7 @@ os.exit()
 
 			-- if postBuildDist is defined then do that too
 			if env.postBuildDist then
-				env:postBuildDist(env:getResourcePath(dist))
+				env.postBuildDist(env:getResourcePath(dist))
 			end
 		end
 	end
@@ -237,6 +170,13 @@ for _,cmd in ipairs(cmds) do
 	elseif cmd == 'distonly' then
 		doBuild{distonly=true}
 	-- TODO 'run' for building a LD_LIBRARY_PATH of all the dependent projects (so you don't have to install and don't have to copy the libs it is dependent on)
+	elseif cmd == 'depends' then
+		local cmdargs = table{...}
+		cmdargs:removeObject'depends'
+		for _,depend in ipairs(env.depends) do
+			-- TODO forward all args, with spaces, etc
+			assert(exec('cd "'..depend..'" && lmake '..cmdargs:mapi(function(s) return ('%q'):format(s) end):concat' '))
+		end
 	else
 		error('unknown command: '..cmd)
 	end

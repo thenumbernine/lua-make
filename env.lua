@@ -12,6 +12,7 @@ local template = require 'template'
 local Env = class()
 
 function Env:init()
+	self.env = self
 	self.home = os.getenv'HOME' or os.getenv'USERPROFILE'
 end
 
@@ -39,6 +40,77 @@ end
 
 function Env:postConfig()
 	self.macros:insert('DIST_NAME_'..self.distName:upper())
+end
+
+function Env:setupBuild(_build)
+	self.build = _build
+	print('building '..self.build)
+	
+	self.distName = nil
+	self.distType = nil
+	self.depends = table()
+	
+	self.cppver = 'c++17'
+
+	self.self = self
+	self:preConfig()
+	
+	self.cwd = '.'
+	local loadenv = setmetatable({}, {
+		__index = function(t,k)
+			local v = self[k] if v ~= nil then return v end
+			local v = _G[k] if v ~= nil then return v end
+			return nil
+		end,
+		__newindex = function(t,k,v)
+			self[k] = v
+		end,
+	})
+	
+	assert(loadfile('buildinfo', 'bt', loadenv))()
+	assert(self.distName)
+	assert(self.distType)
+
+	for _,dependDir in ipairs(self.depends) do
+		-- TODO make a function for loading depend info
+		-- esp so I can derive the depend target from the buildinfo
+		self.cwd = dependDir
+		local push_distName = self.distName
+		local push_distType = self.distType
+		local push_depends = self.depends
+		-- hmm, I should think this system through more ...
+		-- in order to allow include buildinfos to modify state (and include things like macros, search paths, etc)
+		-- I shouldn't be pushing/popping them
+		-- but instead, check 'including' to see if a variable should be modified ...
+		--local push_macros = macros
+
+		self.distName = nil
+		self.distType = nil
+		self.depends = table()
+		self.including = true
+		--self:resetMacros()
+
+		assert(loadfile(self.cwd..'/buildinfo', 'bt', loadenv))()
+		local dependName = self.distName
+--			assert(self.distType == 'lib' or self.distType == 'inc')	--otherwise why are we dependent on it? ... hmm, how about unit tests for applications.
+		self.include:insert(self.cwd..'/include')
+		if (self.platform == 'linux' and self.distType == 'lib' and push_distType == 'app')
+		or (self.platform == 'osx' and self.distType == 'lib')
+		or (self.platform == 'msvc' and self.distType ~= 'inc')
+		or (self.platform == 'mingw' and self.distType ~= 'inc')
+		or (self.platform == 'clang_win' and self.distType ~= 'inc')
+		then
+			self:addDependLib(dependName, self.cwd)
+		end
+		
+		--macros = push_macros
+		self.distName = push_distName
+		self.distType = push_distType
+		self.depends = push_depends
+		self.including = nil
+	end
+
+	self:postConfig()
 end
 
 function Env:exec(cmd, must)
@@ -277,6 +349,8 @@ function Linux:postBuildDist(env)
 		self:exec('cp "'..srcname..'" .')
 	end
 end
+TODO don't use this or it will override project-based callbacks
+TODO some good way to separate callbacks from class methods.  maybe I should't just use 'env' as the namespace of 'buildinfo'
 --]]
 
 
