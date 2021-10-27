@@ -305,11 +305,14 @@ function Linux:buildDist(dist, objs)
 	if self.distType == 'app' then
 		-- [[ copy all libs into distdir
 		-- don't change rpath
-		-- this way the app can be run from dist/linux/$build 
+		-- this way the app can be run from dist/linux/$build
+		-- but it looks like I'm setting rpath to lib/, so ...
 		local distdir = io.getfiledir(dist) or '.'
+		local libdir = distdir..'/lib'		-- TODO getLibraryPath ?
+		self:mkdir(libdir)
 		for _,src in ipairs(self.dependLibs) do
 			local _, name = io.getfiledir(src)
-			local dst = distdir..'/'..name
+			local dst = libdir..'/'..name
 			print('copying from '..src..' to '..dst)
 			self:exec('cp '..src..' '..dst)
 		end
