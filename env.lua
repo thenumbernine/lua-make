@@ -50,7 +50,7 @@ function Env:setupBuild(_build)
 	self.distType = nil
 	self.depends = table()
 	
-	self.cppver = 'c++17'
+	self.cppver = 'c++20'
 
 	self.self = self
 	self:preConfig()
@@ -284,6 +284,45 @@ function GCC:getDependentHeaders(src, obj)
 	assert(results[1] == src, results[1]..' should be '..src)
 	results:remove(1)
 	return results
+end
+
+local function splitPkgConfigArgs(s, prefix)
+	s = string.trim(s)
+	-- TODO don't just split, what if quotes or backslashes are involved?
+	local t = string.split(s, '%s+')
+	-- quick hack for escaping spaces in the mean time ...
+	for i=#t-1,1,-1 do
+		if t[i]:sub(-1) == '\\' then
+			t[i] = t[i]:sub(1,-2)..' '..t:remove(i+1)
+		end
+	end
+	if #t == 1 and #t[1] == 0 then t:remove(1) end
+	-- idk what I'll do about qoute-wrapped args ...
+	if prefix then 
+		t = t:mapi(function(fn)
+			assert(fn:sub(1,#prefix) == prefix, "hmm, pkg-config argument expected to have prefix "..prefix.." but didn't have it: "..fn)
+			return fn:sub(#prefix+1)
+		end)
+	end
+	return t
+end
+
+function GCC:addPackages(...)
+	-- if I wanted I could parse things out manually and put them in their appropriate variables ...
+	-- and maybe there's a benefit to that, for future commands to detect whether a path or file has been included yet ...
+	-- but for now, meh:
+	-- on second though, looks like these need to be added *after* all other libs, 
+	-- so I don't want to just add them here or they'll go *before* ...
+	-- so ... split up it is.
+	for i=1,select('#', ...) do
+		local name = select(i, ...)
+		self.include:append(splitPkgConfigArgs(io.readproc('pkg-config --cflags-only-I '..name), '-I'))
+		self.compileFlags = self.compileFlags .. ' ' .. string.trim(io.readproc('pkg-config --cflags-only-other '..name))
+		
+		self.libs:append(splitPkgConfigArgs(io.readproc('pkg-config --libs-only-l '..name), '-l'))
+		self.libpaths:append(splitPkgConfigArgs(io.readproc('pkg-config --libs-only-L '..name), '-L'))
+		self.linkFlags = self.linkFlags .. ' ' .. string.trim(io.readproc('pkg-config --libs-only-other '..name))
+	end
 end
 
 
