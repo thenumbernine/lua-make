@@ -23,7 +23,7 @@ local function detect()
 		-- cl.exe has no version flag (I think), but outputs the version as default.
 		-- However it does so to stderr, which will get piped to nul.
 		-- However however it at least prints out its warning to stdout: "usage: cl ..."  hmm... seems it has mixed up the use of stdout and stderr...
-		elseif io.popen'cl.exe 2> nul':read'a' > 0 then
+		elseif #io.popen'cl.exe 2> nul':read'a' > 0 then
 			-- MSVC
 			return 'msvc'
 		end

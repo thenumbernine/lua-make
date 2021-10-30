@@ -963,4 +963,4 @@ elseif detect == 'osx' then
 	return OSX
 end
 
-error("unknown environment: "..detect)
+error("unknown environment: "..tostring(detect))
