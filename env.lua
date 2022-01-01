@@ -50,7 +50,7 @@ function Env:setupBuild(_build)
 	self.distType = nil
 	self.depends = table()
 	
-	self.cppver = 'c++20'
+	self.cppver = 'c++17'
 
 	self.self = self
 	self:preConfig()
@@ -165,7 +165,8 @@ function Env:getDistSuffix()
 	return self.distType == 'lib' and self.libSuffix or self.appSuffix
 end
 
-function Env:buildDist(dist, objs)	
+function Env:buildDist(dist, objs)
+	objs = table(objs)
 	print('building '..dist..' from '..objs:concat' ')	
 	local distdir = io.getfiledir(dist) or '.'
 	self:mkdir(distdir)
