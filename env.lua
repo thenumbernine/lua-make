@@ -156,9 +156,15 @@ function Env:buildObj(obj, src)
 		end)):append{
 			self.compileOutputFlag..self:fixpath(obj),
 			self:fixpath(src)
-		}:concat' '
+		}
+		:append{self.objLogFile and ('> '..self.objLogFile..' 2>&1') or nil}
+		:concat' '
 	)
-	return true	-- TODO ,log
+	local log
+	if self.objLogFile then
+		log = file[self.objLogFile]
+	end
+	return true, log
 end
 
 function Env:getDistSuffix()
@@ -177,8 +183,15 @@ function Env:buildDist(dist, objs)
 		:append(self.dynamicLibs:map(function(dynlib) return self:fixpath(dynlib) end))
 		:append(self.libs:map(function(lib) return self.linkLibFlag..lib end))
 		:append{self.linkOutputFlag..self:fixpath(dist)}
-		:concat' ', true)
-	return true	-- TODO ,log
+		:append{self.distLogFile and ('> '..self.distLogFile..' 2>&1') or nil}
+		:concat' ',
+		true
+	)
+	local log
+	if self.distLogFile then
+		log = file[self.distLogFile]
+	end
+	return true, log
 end
 
 function Env:getDist()
@@ -505,7 +518,7 @@ function OSX:buildDist(dist, objs)
 			self:exec('install_name_tool -change \\@rpath/'..name..' \\@executable_path/../Resources/lib/'..name..' '..dist)
 		end
 	end
-	return status	--, log
+	return status, log
 end
 
 function OSX:getResourcePath(dist)
@@ -765,22 +778,29 @@ function MSVC:buildDist(dist, objs)
 			local staticLibFile = distbase..'-static.lib'
 			-- static libs don't need all the pieces until they are linked to an .exe
 			-- so don't bother with libs, libpaths, dynamicLibs
-			self:exec(table{
-				'lib.exe',
-				'/nologo',
-				--'/incremental',	-- now gives a warning: unrecognized option
-				'/nodefaultlib',
-				'/out:'..self:fixpath(staticLibFile),
-			}:append(objs):concat' ', true)
+			self:exec(
+				table{
+					'lib.exe',
+					'/nologo',
+					--'/incremental',	-- now gives a warning: unrecognized option
+					'/nodefaultlib',
+					'/out:'..self:fixpath(staticLibFile),
+				}
+				:append(objs)
+				:append{self.distLogFile and ('> '..self.distLogFile..' 2>&1') or nil}
+				:concat' ', 
+				true
+			)
 		
 		-- building DLLs.  
 		-- Can't do this until I add all the API export/import macros everywhere ...
 		else
-			self:exec(table{
-				'link.exe',
-				'/nologo',
-				'/dll',
-	
+			self:exec(
+				table{
+					'link.exe',
+					'/nologo',
+					'/dll',
+		
 --[=[
 here's a dilemma...
 I don't want to put declspecs everywhere in the code just for windows
@@ -793,25 +813,33 @@ but this only works if we have a 'DllMain' function defined ...
 --'/force:unresolved',
 '/incremental',
 				
-				'/out:'..dllfile,
-				--'/pdb:'..self:fixpath(pdbName),
-			}
-			--:append(self.libpaths:map(function(libpath) return '/libpath:'..libpath end))
-			--:append(self.libs:map(function(lib) return lib end))
-			:append(self.libs)
-			:append(self.dynamicLibs)
-			:append(objs)
-			:concat' ', true)
+					'/out:'..dllfile,
+					--'/pdb:'..self:fixpath(pdbName),
+				}
+				--:append(self.libpaths:map(function(libpath) return '/libpath:'..libpath end))
+				--:append(self.libs:map(function(lib) return lib end))
+				:append(self.libs)
+				:append(self.dynamicLibs)
+				:append(objs)
+				:append{self.distLogFile and ('> '..self.distLogFile..' 2>&1') or nil}
+				:concat' ',
+				true
+			)
 
 			-- [[ 
 			local defSrcFile = distbase..'.def.txt'
-			self:exec(table{
-				'dumpbin.exe',
-				'/nologo /exports',
-				dllfile,
-				'>',
-				defSrcFile
-			}:concat' ', true)
+			self:exec(
+				table{
+					'dumpbin.exe',
+					'/nologo /exports',
+					dllfile,
+					'>',
+					defSrcFile
+				}
+				:append{self.distLogFile and ('>> '..self.distLogFile..' 2>&1') or nil}
+				:concat' ', 
+				true
+			)
 
 			-- TODO use this trick: https://stackoverflow.com/questions/9946322/how-to-generate-an-import-library-lib-file-from-a-dll  
 			local deffile = distbase..'.def'
@@ -822,15 +850,21 @@ but this only works if we have a 'DllMain' function defined ...
 			--]]
 
 			local dllLibFile = distbase..'.lib'
-			self:exec(table{
+			self:exec(
+				table{
 					'lib.exe',
 					'/nologo /nodefaultlib /machine:x64',
 					'/def:'..deffile,
 					'/out:'..dllLibFile,
 				}
 				--:append(objs)
+				:append{self.distLogFile and ('>> '..self.distLogFile..' 2>&1') or nil}
 				:concat' '
 			, true)
+		end
+
+		if self.distLogFile then
+			log = file[self.distLogFile]
 		end
 	else
 		error("unknown distType "..require'ext.tolua'(self.distType))
@@ -841,7 +875,7 @@ but this only works if we have a 'DllMain' function defined ...
 		os.remove'vc140.pdb'
 	end
 
-	return true	-- TODO ,log
+	return true, log
 end
 
 function MSVC:clean()
@@ -903,12 +937,13 @@ function ClangWindows:buildDist(dist, objs)
 	local dllfile = dist 
 	--local pdbName = distbase..'.pdb'
 
+	local status, log
 	if self.distType == 'app' then
 		--self.linkFlags = self.linkFlags .. ' /pdb:'..self:fixpath(pdbName)
 
 		self:copyRes(dist)
 
-		ClangWindows.super.buildDist(self, dist, objs)
+		status, log = ClangWindows.super.buildDist(self, dist, objs)
 	elseif self.distType == 'lib' then
 		print('building '..dist..' from '..objs:concat' ')
 		local distdir = io.getfiledir(dist) or '.'
@@ -918,15 +953,25 @@ function ClangWindows:buildDist(dist, objs)
 		local staticLibFile = distbase..'-static.lib'
 		-- static libs don't need all the pieces until they are linked to an .exe
 		-- so don't bother with libs, libpaths, dynamicLibs
-		self:exec(table{
-			'llvm-lib.exe',
-			'/nologo',
-			--'/nodefaultlib',	-- llvm-lib can't handle this
-			'/out:'..self:fixpath(self.staticLibFile),
-		}:append(objs):concat' ', true)
+		self:exec(
+			table{
+				'llvm-lib.exe',
+				'/nologo',
+				--'/nodefaultlib',	-- llvm-lib can't handle this
+				'/out:'..self:fixpath(self.staticLibFile),
+			}
+			:append(objs)
+			:append{self.distLogFile and ('> '..self.distLogFile..' 2>&1') or nil}
+			:concat' ',
+			true
+		)
+		status = true
+		if self.distLogFile then
+			log = file[self.distLogFile]
+		end
 --]=]
 	end
-	return true	-- TODO ,log
+	return status, log
 end
 --]==]
 

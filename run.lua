@@ -43,6 +43,9 @@ dynamicLibs
 	on linux this contains paths to explicit .so files
 	on osx this is .dylib files
 	on windows this is .lib files associated with .dll files (as opposed to the .lib files that are static libraries ... smh windows)
+
+objLogFile = filename to save output of buildObj
+distLogFile = filename to save output of buildDist
 --]]
 
 local os = require 'ext.os'
