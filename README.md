@@ -17,47 +17,47 @@ usage:
 
 if you're lazy:
 ```
-	lua -lmake
+lua -lmake
 ```
-	
+
 and to clean ...
 ```
-	lua -lmake.clean
+lua -lmake.clean
 ```
 
 if you want to do more than one thing at once...
 ```
-	lua /path/to/lua/make/run.lua clean distclean all
+lua /path/to/lua/make/run.lua clean distclean all
 ```
 
 
 if you want a custom platform:
 ```
-	lua -e "platform='$PLATFORM'" make.lua
+lua -e "platform='$PLATFORM'" make.lua
 ```
 
 where $PLATFORM can be:
--	`osx`
--	`linux`
--	`clang_win`
--	`mingw`
--	`msvc`
+- `osx`
+- `linux`
+- `clang_win`
+- `mingw`
+- `msvc`
 
 or if you want a bit better shell access to run this, make this file:
 lmake:
 ```
-	#!/usr/bin/env sh
-	lua ~/path/to/make/run.lua "$@"
+#!/usr/bin/env sh
+lua ~/path/to/make/run.lua "$@"
 ```
 
 and run it with the following arguments:
--	`lmake clean` = cleans objects
--	`lmake distclean` = cleans executable
--	`lmake` = builds default configuration
--	`lmake all` = builds debug and release
--	`lmake debug` = builds debug
--	`lmake release` = builds release
--	`lmake distonly` = builds dist from objs only
+- `lmake clean` = cleans objects
+- `lmake distclean` = cleans executable
+- `lmake` = builds default configuration
+- `lmake all` = builds debug and release
+- `lmake debug` = builds debug
+- `lmake release` = builds release
+- `lmake distonly` = builds dist from objs only
 
 Alright I want to use this in other scripts,
 The specific Make subclass needs to be selected by the OS.
