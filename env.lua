@@ -214,8 +214,8 @@ function Env:distclean()
 	self:exec'rm -fr dist'
 end
 
-function Env:getDependentHeaders(src)
-	return {}
+function Env:getDependentHeaders(src,obj)
+	return table()
 end
 
 -- abstract subclass for Linux, OSX, MinGW

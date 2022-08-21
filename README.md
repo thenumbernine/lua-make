@@ -1,3 +1,5 @@
+[![paypal](https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=KYWUWS86GSFGL)
+
 Yes, this is yet *another* build system.
 
 First I made a decent Makefile system.
@@ -14,39 +16,49 @@ They optionally can have a depend() function that sets up any other dependencies
 usage:
 
 if you're lazy:
+```
 	lua -lmake
+```
 	
 and to clean ...
-	lua -lmake.clean 
+```
+	lua -lmake.clean
+```
 
 if you want to do more than one thing at once...
+```
 	lua /path/to/lua/make/run.lua clean distclean all
+```
 
 
 if you want a custom platform:
-lua -e "platform='$PLATFORM'" make.lua
+```
+	lua -e "platform='$PLATFORM'" make.lua
+```
 
 where $PLATFORM can be:
-	osx
-	linux
-	clang_win
-	mingw
-	msvc
+-	`osx`
+-	`linux`
+-	`clang_win`
+-	`mingw`
+-	`msvc`
 
 or if you want a bit better shell access to run this, make this file:
 lmake:
+```
 	#!/usr/bin/env sh
 	lua ~/path/to/make/run.lua "$@"
+```
 
 and run it with the following arguments:
-	lmake clean = cleans objects
-	lmake distclean = cleans executable
-	lmake = builds default configuration
-	lmake all = builds debug and release
-	lmake debug = builds debug
-	lmake release = builds release
-	lmake distonly = builds dist from objs only
+-	`lmake clean` = cleans objects
+-	`lmake distclean` = cleans executable
+-	`lmake` = builds default configuration
+-	`lmake all` = builds debug and release
+-	`lmake debug` = builds debug
+-	`lmake release` = builds release
+-	`lmake distonly` = builds dist from objs only
 
-Alright I want to use this in other scripts, 
+Alright I want to use this in other scripts,
 The specific Make subclass needs to be selected by the OS.
 The compile cpp to obj and obj to app commands need to be callable from outside.
