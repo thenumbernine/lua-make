@@ -135,7 +135,7 @@ end
 function Env:buildObj(obj, src)
 	print('building '..obj..' from '..src)
 
-	self:mkdir(file(obj):getdir() or '.')
+	self:mkdir(file(obj):getdir())
 	self:exec(
 		table{
 			self.compiler,
@@ -173,7 +173,7 @@ end
 function Env:buildDist(dist, objs)
 	objs = table(objs)
 	print('building '..dist..' from '..objs:concat' ')	
-	local distdir = file(dist):getdir() or '.'
+	local distdir = file(dist):getdir()
 	self:mkdir(distdir)
 	self:exec(
 		table{self.linker, self.linkFlags}
@@ -359,7 +359,7 @@ function Linux:buildDist(dist, objs)
 		-- don't change rpath
 		-- this way the app can be run from dist/linux/$build
 		-- but it looks like I'm setting rpath to lib/, so ...
-		local distdir = file(dist):getdir() or '.'
+		local distdir = file(dist):getdir()
 		local libdir = distdir..'/lib'		-- TODO getLibraryPath ?
 		self:mkdir(libdir)
 		for _,src in ipairs(self.dependLibs) do
@@ -522,7 +522,7 @@ function OSX:buildDist(dist, objs)
 end
 
 function OSX:getResourcePath(dist)
-	local distdir = file(dist):getdir() or '.'
+	local distdir = file(dist):getdir()
 	return distdir..'/../Resources'
 end
 
@@ -605,7 +605,7 @@ end
 
 function MinGW:buildDist(dist, objs)
 	if self.distType == 'lib' then
-		local distdir = file(dist):getdir() or '.'
+		local distdir = file(dist):getdir()
 		self:mkdir(distdir)
 		
 		self:exec(table{
@@ -752,7 +752,7 @@ function MSVC:buildDist(dist, objs)
 	-- technically you can ... but I am avoiding these for now
 	assert(#self.libpaths == 0, "can't link to libpaths with windows")
 	
-	local distdir = file(dist):getdir() or '.'
+	local distdir = file(dist):getdir()
 	if self.distType == 'lib' then
 		self.linkFlags = self.linkFlags .. ' /dll'
 	end
@@ -770,7 +770,7 @@ function MSVC:buildDist(dist, objs)
 		status, log = MSVC.super.buildDist(self, dist, objs)
 	elseif self.distType == 'lib' then
 		print('building '..dist..' from '..table.concat(objs, ' '))
-		local distdir = file(dist):getdir() or '.'
+		local distdir = file(dist):getdir()
 		self:mkdir(distdir)
 
 		-- build the static lib
@@ -928,7 +928,7 @@ function ClangWindows:postConfig()
 end
 
 function ClangWindows:buildDist(dist, objs)
-	local distdir = file(dist):getdir() or '.'
+	local distdir = file(dist):getdir()
 	if self.distType == 'lib' then
 		self.linkFlags = self.linkFlags .. ' /dll'
 	end
@@ -946,7 +946,7 @@ function ClangWindows:buildDist(dist, objs)
 		status, log = ClangWindows.super.buildDist(self, dist, objs)
 	elseif self.distType == 'lib' then
 		print('building '..dist..' from '..objs:concat' ')
-		local distdir = file(dist):getdir() or '.'
+		local distdir = file(dist):getdir()
 		self:mkdir(distdir)
 
 -- [=[	-- build the static lib

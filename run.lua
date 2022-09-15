@@ -48,7 +48,7 @@ objLogFile = filename to save output of buildObj
 distLogFile = filename to save output of buildDist
 --]]
 
-local os = require 'ext.os'
+local file = require 'ext.file'
 local table = require 'ext.table'
 local find = require 'make.find'
 local exec = require 'make.exec'
@@ -59,26 +59,20 @@ local env = Env()
 print("using environment: "..env.name)
 
 
-local lfs
-do
-	local found
-	found, lfs = pcall(require, 'lfs')
-	if not found then 
-		print("can't find lfs -- can't determine last file modification time -- rebuilding all")
-		lfs = nil 
-	end
+-- this is internal to ext, but it is how ext provides the file:attr() wrapper
+if not require 'ext.detect_lfs'() then 
+	print("can't find lfs -- can't determine last file modification time -- rebuilding all")
 end
 
 local function needsUpdate(target, depends)
-	if not lfs then return true end
-	if not os.fileexists(target) then return true end
+	if not file(target):exists() then return true end
 	
-	local targetAttr = lfs.attributes(target)
+	local targetAttr = file(target):attr()
 	if not targetAttr then return true end
 
 	local dependModification
 	for _,depend in ipairs(depends) do
-		local dependAttr = assert(lfs.attributes(depend))
+		local dependAttr = assert(file(depend):attr())
 		if not dependModification then
 			dependModification = dependAttr.modification
 		else
