@@ -2,7 +2,6 @@ local class = require 'ext.class'
 local table = require 'ext.table'
 local file = require 'ext.file'
 local io = require 'ext.io'
-local os = require 'ext.os'
 local string = require 'ext.string'
 local find = require 'make.find'
 local exec = require 'make.exec'
@@ -118,10 +117,10 @@ function Env:exec(cmd, must)
 end
 
 function Env:mkdir(fn)
-	if os.fileexists(fn) then
-		assert(os.isdir(fn), "tried to mkdir on a file that is not a directory")
+	if file(fn):exists() then
+		assert(file(fn):isdir(), "tried to mkdir on a file that is not a directory")
 	else
-		os.mkdir(fn, true)
+		file(fn):mkdir(true)
 	end
 end
 
@@ -136,7 +135,7 @@ end
 function Env:buildObj(obj, src)
 	print('building '..obj..' from '..src)
 
-	self:mkdir(io.getfiledir(obj) or '.')
+	self:mkdir(file(obj):getdir() or '.')
 	self:exec(
 		table{
 			self.compiler,
@@ -162,7 +161,7 @@ function Env:buildObj(obj, src)
 	)
 	local log
 	if self.objLogFile then
-		log = file[self.objLogFile]
+		log = file(self.objLogFile):read()
 	end
 	return true, log
 end
@@ -174,7 +173,7 @@ end
 function Env:buildDist(dist, objs)
 	objs = table(objs)
 	print('building '..dist..' from '..objs:concat' ')	
-	local distdir = io.getfiledir(dist) or '.'
+	local distdir = file(dist):getdir() or '.'
 	self:mkdir(distdir)
 	self:exec(
 		table{self.linker, self.linkFlags}
@@ -189,7 +188,7 @@ function Env:buildDist(dist, objs)
 	)
 	local log
 	if self.distLogFile then
-		log = file[self.distLogFile]
+		log = file(self.distLogFile):read()
 	end
 	return true, log
 end
@@ -292,7 +291,7 @@ function GCC:getDependentHeaders(src, obj)
 	local results = io.readproc(cmd)
 	results = results:gsub('\\', ' '):gsub('%s+', '\n')
 	results = string.split(string.trim(results), '\n')
-	local objname = select(2, io.getfiledir(obj))
+	local objname = select(2, file(obj):getdir())
 	assert(results[1] == objname..':', results[1]..' should be '..objname)
 	results:remove(1)
 	assert(results[1] == src, results[1]..' should be '..src)
@@ -360,18 +359,18 @@ function Linux:buildDist(dist, objs)
 		-- don't change rpath
 		-- this way the app can be run from dist/linux/$build
 		-- but it looks like I'm setting rpath to lib/, so ...
-		local distdir = io.getfiledir(dist) or '.'
+		local distdir = file(dist):getdir() or '.'
 		local libdir = distdir..'/lib'		-- TODO getLibraryPath ?
 		self:mkdir(libdir)
 		for _,src in ipairs(self.dependLibs) do
-			local _, name = io.getfiledir(src)
+			local _, name = file(src):getdir()
 			local dst = libdir..'/'..name
 			print('copying from '..src..' to '..dst)
 			self:exec('cp '..src..' '..dst)
 		end
 		--]]
 		-- [[ copy res/ folder into the dist folder
-		if os.fileexists'res' then
+		if file'res':exists() then
 			self:exec('cp -R res/* '..self:getResourcePath(dist), true)
 			-- TODO
 			-- self:copyTree('*', 'res', self:getResourcePath(dist), true)
@@ -430,7 +429,7 @@ end
 
 function OSX:postConfig()
 	local dist = self:getDist()
-	local _, distname = io.getfiledir(dist)
+	local _, distname = file(dist):getdir()
 	if self.distType == 'lib' then	
 		self.linkFlags = self.linkFlags .. ' -dynamiclib -undefined suppress -flat_namespace -install_name @rpath/'..distname
 	end
@@ -458,10 +457,10 @@ function OSX:buildDist(dist, objs)
 	local status, log = OSX.super.buildDist(self, dist, objs)
 	if not status then return status end
 	if self.distType == 'app' then
-		local distdir, distname = io.getfiledir(dist)
+		local distdir, distname = file(dist):getdir()
 		distdir = distdir or '.'
-		file[distdir..'/../PkgInfo'] = 'APPLhect'
-		file[distdir..'/../Info.plist'] = template([[
+		file(distdir..'/../PkgInfo'):write'APPLhect'
+		file(distdir..'/../Info.plist'):write(template([[
 <?='<'..'?'?>xml version="1.0" encoding="UTF-8"<?='?'..'>'?>
 <!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -495,13 +494,14 @@ function OSX:buildDist(dist, objs)
 </dict>
 </plist>
 ]], {distname=distname})
-
+		)
+		
 		local resDir = distdir..'/../Resources'
 		local resLibDir = resDir..'/lib'
 		self:mkdir(resLibDir)
 	
 		-- copy over Resources
-		if os.fileexists'res' then
+		if file'res':exists() then
 			self:exec('cp -R res/* '..resDir)
 			-- TODO
 			-- self:copyTree('*', 'res', resDir)
@@ -510,7 +510,7 @@ function OSX:buildDist(dist, objs)
 		-- copy all libs into distdir/lib
 		-- and make sure their rpath is correct
 		for _,src in ipairs(self.dynamicLibs) do
-			local _, name = io.getfiledir(src)
+			local _, name = file(src):getdir()
 			local dst = resLibDir..'/'..name
 			print('copying from '..src..' to '..dst)
 			self:exec('cp '..src..' '..dst)
@@ -522,7 +522,7 @@ function OSX:buildDist(dist, objs)
 end
 
 function OSX:getResourcePath(dist)
-	local distdir = io.getfiledir(dist) or '.'
+	local distdir = file(dist):getdir() or '.'
 	return distdir..'/../Resources'
 end
 
@@ -546,7 +546,7 @@ function Windows:copyTree(ext, src, dst, must)
 end
 
 function Windows:copyRes(dist)
-	if os.fileexists'res' then
+	if file'res':exists() then
 		self:copyTree('*', 'res', self:fixpath(self:getResourcePath(dist)), true)
 	end
 end
@@ -605,7 +605,7 @@ end
 
 function MinGW:buildDist(dist, objs)
 	if self.distType == 'lib' then
-		local distdir = io.getfiledir(dist) or '.'
+		local distdir = file(dist):getdir() or '.'
 		self:mkdir(distdir)
 		
 		self:exec(table{
@@ -698,8 +698,8 @@ function MSVC:getSources()
 		-- hmm, do i need a .cpp extension?
 		print('attempting to write to '..tmp)
 		
---file[tmp] =
-local f = assert(io.open(tmp, 'w'))
+--file(tmp) =
+local f = assert(file(tmp):open'w')
 f:write
 		[[
 #include <windows.h>
@@ -752,7 +752,7 @@ function MSVC:buildDist(dist, objs)
 	-- technically you can ... but I am avoiding these for now
 	assert(#self.libpaths == 0, "can't link to libpaths with windows")
 	
-	local distdir = io.getfiledir(dist) or '.'
+	local distdir = file(dist):getdir() or '.'
 	if self.distType == 'lib' then
 		self.linkFlags = self.linkFlags .. ' /dll'
 	end
@@ -770,7 +770,7 @@ function MSVC:buildDist(dist, objs)
 		status, log = MSVC.super.buildDist(self, dist, objs)
 	elseif self.distType == 'lib' then
 		print('building '..dist..' from '..table.concat(objs, ' '))
-		local distdir = io.getfiledir(dist) or '.'
+		local distdir = file(dist):getdir() or '.'
 		self:mkdir(distdir)
 
 		-- build the static lib
@@ -843,10 +843,10 @@ but this only works if we have a 'DllMain' function defined ...
 
 			-- TODO use this trick: https://stackoverflow.com/questions/9946322/how-to-generate-an-import-library-lib-file-from-a-dll  
 			local deffile = distbase..'.def'
-			file[deffile] = table{
+			file(deffile):write(table{
 				'LIBRARY '..self.distName,
 				'EXPORTS',
-			}:concat'\n'
+			}:concat'\n')
 			--]]
 
 			local dllLibFile = distbase..'.lib'
@@ -864,15 +864,15 @@ but this only works if we have a 'DllMain' function defined ...
 		end
 
 		if self.distLogFile then
-			log = file[self.distLogFile]
+			log = file(self.distLogFile):read()
 		end
 	else
 		error("unknown distType "..require'ext.tolua'(self.distType))
 	end
 
-	if os.fileexists'vc140.pdb' then
+	if file'vc140.pdb':exists() then
 		print("you made a pdb you weren't expecting for build "..distdir)
-		os.remove'vc140.pdb'
+		file'vc140.pdb':remove()
 	end
 
 	return true, log
@@ -928,7 +928,7 @@ function ClangWindows:postConfig()
 end
 
 function ClangWindows:buildDist(dist, objs)
-	local distdir = io.getfiledir(dist) or '.'
+	local distdir = file(dist):getdir() or '.'
 	if self.distType == 'lib' then
 		self.linkFlags = self.linkFlags .. ' /dll'
 	end
@@ -946,7 +946,7 @@ function ClangWindows:buildDist(dist, objs)
 		status, log = ClangWindows.super.buildDist(self, dist, objs)
 	elseif self.distType == 'lib' then
 		print('building '..dist..' from '..objs:concat' ')
-		local distdir = io.getfiledir(dist) or '.'
+		local distdir = file(dist):getdir() or '.'
 		self:mkdir(distdir)
 
 -- [=[	-- build the static lib
@@ -967,7 +967,7 @@ function ClangWindows:buildDist(dist, objs)
 		)
 		status = true
 		if self.distLogFile then
-			log = file[self.distLogFile]
+			log = file(self.distLogFile):read()
 		end
 --]=]
 	end
