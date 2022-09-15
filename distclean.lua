@@ -1,7 +1,7 @@
 --shortcut for -lmake
 local table = require 'ext.table'
-local io = require 'ext.io'
+local file = require 'ext.file'
 local makefn = package.searchpath('make', package.path):gsub('\\', '/')
-local makedir = io.getfiledir(makefn)
+local makedir = file(makefn):getdir()
 local luabin = arg[table(arg):keys():sort():inf()]
 os.execute(luabin..' "'..makedir..'/run.lua" distclean')
