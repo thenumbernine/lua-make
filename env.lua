@@ -13,6 +13,13 @@ local Env = class()
 function Env:init()
 	self.env = self
 	self.home = os.getenv'HOME' or os.getenv'USERPROFILE'
+	--[[ TODO use these
+	self.srcDir = 'src'
+	self.includeDir = 'include'
+	self.pchDir = 'incbin'
+	self.objDir = 'obj'
+	self.distDir = 'dist'
+	--]]
 end
 
 function Env:fixpath(s) return s end
@@ -186,6 +193,7 @@ function Env:buildPCH(pch, header)
 			self.compileFlags,
 			self.compileCppVerFlag..self.cppver,
 			'-x c++-header',
+			--'-Wno-pragma-once-outside-header',	-- clang-specific ... doesn't work in gcc
 		}:append(self.include:map(function(path) 
 			return self.compileIncludeFlag..self:fixpath(path) 
 		end)):append(self.macros:map(function(macro) 
@@ -248,6 +256,7 @@ end
 
 function Env:clean()
 	self:exec'rm -fr obj'
+	self:exec'rm -fr incbin'
 end
 
 function Env:distclean()
@@ -336,10 +345,11 @@ function GCC:getDependentHeaders(src, obj, buildingPCH)
 	results = results:gsub('\\', ' '):gsub('%s+', '\n')
 	results = string.split(string.trim(results), '\n')
 	-- TODO if I'm getting dependent headers *on* headers ... then the results still come back as .o extension
-	if not buildingPCH then 
-		local objname = select(2, file(obj):getdir())
-		assert(results[1] == objname..':', results[1]..' should be '..objname)
+	local objname = select(2, file(obj):getdir())
+	if buildingPCH then 
+		objname = objname:gsub('%.h.gch$', '.o')
 	end
+	assert(results[1] == objname..':', results[1]..' should be '..objname)
 	results:remove(1)
 	assert(results[1] == src, results[1]..' should be '..src)
 	results:remove(1)
@@ -928,6 +938,7 @@ end
 function MSVC:clean()
 	-- false in case the dir isnt there
 	self:exec('rmdir /s /q obj', false)
+	self:exec('rmdir /s /q incbin', false)
 end
 
 function MSVC:distclean()
