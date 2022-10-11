@@ -104,8 +104,26 @@ local function doBuild(args)
 	for _,_build in ipairs(args.buildTypes or {'debug', 'release'}) do
 		env:setupBuild(_build)
 		
+		--[[ build pch
+		do
+			local headers = env:getHeaders()	-- 'include' folder
+			local pchs = headers:map(function(f)
+				f = f:gsub('^include/', 'incbin/'..env.platform..'/'..env.build..'/')
+				f = f .. '.gch' 
+				return f
+			end)
+			for i,header in ipairs(headers) do
+				local pch = assert(pchs[i])
+				local dependentHeaders = env:getDependentHeaders(header, pch, true)
+				if needsUpdate(header, dependentHeaders) then
+					env:buildPCH(pch, header)
+				end
+			end
+		end
+		--]]
+
 		-- determine source files
-		local srcs = env:getSources()
+		local srcs = env:getSources()	-- 'src' folder
 		if #srcs == 0 then
 			print'no input files found'
 		else
@@ -114,11 +132,10 @@ local function doBuild(args)
 				f = f:gsub('%.cpp$', env.objSuffix)
 				return f
 			end)
-			local headers = find('include')	-- TODO find alll include
 
 			if not args.distonly then
 				for i,obj in ipairs(objs) do
-					local src = srcs[i]
+					local src = assert(srcs[i])
 
 					-- see if we can search for the include the files that this source file depends on
 					local dependentHeaders = env:getDependentHeaders(src, obj)

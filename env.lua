@@ -49,7 +49,7 @@ function Env:setupBuild(_build)
 	self.distType = nil
 	self.depends = table()
 	
-	self.cppver = 'c++17'
+	self.cppver = 'c++20'
 
 	self.self = self
 	self:preConfig()
@@ -128,6 +128,11 @@ function Env:getSources()
 	return find('src', '%.cpp$')
 end
 
+function Env:getHeaders()
+	-- TODO options for other header file extensions?
+	return find('include', '%.h')
+end
+
 function Env:addDependLib(dependName, dependDir)
 	self.dynamicLibs:insert(dependDir..'/dist/'..self.platform..'/'..self.build..'/'..self.libPrefix..dependName..self.libSuffix)
 end
@@ -140,6 +145,7 @@ function Env:buildObj(obj, src)
 		table{
 			self.compiler,
 			self.compileFlags,
+			self.compileCppVerFlag..self.cppver,
 		}:append(self.include:map(function(path) 
 			return self.compileIncludeFlag..self:fixpath(path) 
 		end)):append(self.macros:map(function(macro) 
@@ -148,13 +154,48 @@ function Env:buildObj(obj, src)
 			-- how do osx/linux handle quotes and spaces in macros?
 			-- what is the complete list of characters that need to be escaped?
 			if macro:find' ' or macro:find'"' then
-				return self.compileMacroFlag..'"'..macro:gsub('"', '\\"')..'"'
+				macro = '"'..macro:gsub('"', '\\"')..'"'
 			end
-			
 			return self.compileMacroFlag..macro 
 		end)):append{
 			self.compileOutputFlag..self:fixpath(obj),
 			self:fixpath(src)
+		}
+		:append{self.objLogFile and ('> '..self.objLogFile..' 2>&1') or nil}
+		:concat' '
+	)
+	local log
+	if self.objLogFile then
+		log = file(self.objLogFile):read()
+	end
+	return true, log
+end
+
+-- very similar to above
+function Env:buildPCH(pch, header)
+	print('building '..pch..' from '..header)
+
+	-- ok this is a mess ...
+	-- setupBuild() calls postConfig() which modifies compilerFlags permanently
+	--  one way is appending cppver
+
+	self:mkdir(file(pch):getdir())
+	self:exec(
+		table{
+			self.compiler,
+			self.compileFlags,
+			self.compileCppVerFlag..self.cppver,
+			'-x c++-header',
+		}:append(self.include:map(function(path) 
+			return self.compileIncludeFlag..self:fixpath(path) 
+		end)):append(self.macros:map(function(macro) 
+			if macro:find' ' or macro:find'"' then
+				macro = '"'..macro:gsub('"', '\\"')..'"'
+			end
+			return self.compileMacroFlag..macro 
+		end)):append{
+			self.compileOutputFlag..self:fixpath(pch),
+			self:fixpath(header)
 		}
 		:append{self.objLogFile and ('> '..self.objLogFile..' 2>&1') or nil}
 		:concat' '
@@ -237,6 +278,7 @@ function GCC:preConfig()
 	self.compileMacroFlag = '-D'
 	self.compileOutputFlag = '-o '	-- space ... because with msvc there shouldn't be a space
 	self.compileGetIncludeFilesFlag = '-MM'	-- use -M to get system files as well
+	self.compileCppVerFlag = '-std='
 	self.linker = 'g++'
 	self.linkLibPathFlag = '-L'
 	self.linkLibFlag = '-l'
@@ -246,7 +288,6 @@ function GCC:preConfig()
 end
 
 function GCC:postConfig()
-	self.compileFlags = self.compileFlags .. ' -std='..self.cppver
 	-- really this is Linux and MinGW specific
 	if self.platform ~= 'osx' then
 		if self.distType == 'lib' then
@@ -263,36 +304,42 @@ function GCC:postConfig()
 	GCC.super.postConfig(self)
 end
 
-function GCC:getDependentHeaders(src, obj)
+function GCC:getDependentHeaders(src, obj, buildingPCH)
+	self:mkdir(file(obj):getdir())
 	-- copied from buildObject ... so maybe borrow that?
 	local cmd = table{
 		self.compiler,
 		self.compileFlags,
+		self.compileCppVerFlag..self.cppver,
+	}:append{
+		buildingPCH and '-x c++-header' or nil,
 	}:append(self.macros:map(function(macro) 
-		
 		-- matches Env:buildObj
 		if macro:find' ' or macro:find'"' then
-			return self.compileMacroFlag..'"'..macro:gsub('"', '\\"')..'"'
+			macro = '"'..macro:gsub('"', '\\"')..'"'
 		end
-		
 		return self.compileMacroFlag..macro 
 	end)):append(self.include:map(function(path) 
 		return self.compileIncludeFlag..self:fixpath(path) 
 	end))
-	--:append{
-	--	self.compileOutputFlag..self:fixpath(obj),
-	--	self:fixpath(src)
-	--}
+	--[[
+	:append{
+		self.compileOutputFlag..self:fixpath(obj),
+	}
+	--]]
 	:concat' '
-	..' '..self.compileGetIncludeFilesFlag..' '..src
+	..' '..self.compileGetIncludeFilesFlag..' '..self:fixpath(src)
 
 	-- copied from self:exec() ... so maybe borrow that too?
 	print('>> '..cmd)
 	local results = io.readproc(cmd)
 	results = results:gsub('\\', ' '):gsub('%s+', '\n')
 	results = string.split(string.trim(results), '\n')
-	local objname = select(2, file(obj):getdir())
-	assert(results[1] == objname..':', results[1]..' should be '..objname)
+	-- TODO if I'm getting dependent headers *on* headers ... then the results still come back as .o extension
+	if not buildingPCH then 
+		local objname = select(2, file(obj):getdir())
+		assert(results[1] == objname..':', results[1]..' should be '..objname)
+	end
 	results:remove(1)
 	assert(results[1] == src, results[1]..' should be '..src)
 	results:remove(1)
@@ -414,6 +461,8 @@ OSX.name = 'osx'
 
 -- TODO 
 --local OSX = class(GCC, Linux) ?
+
+-- TODO OSX_GCC and OSXClang
 
 function OSX:preConfig()
 	self.platform = 'osx'
@@ -575,12 +624,9 @@ end
 
 function MinGW:postConfig()
 	self.include:insert(self.home..'/include')
-	
-	self.compileFlags = self.compileFlags .. ' -std='..self.cppver
 
 	Env.postConfig(self)		-- adds DIST_NAME_ macro
 	--GCC.postConfig(self)		-- adds link flags and such
-	--self.compileFlags = self.compileFlags .. ' -std='..cppver
 
 	if self.distType == 'app' then
 		--libs:insert(1, 'mingw32')
@@ -674,7 +720,9 @@ function MSVC:preConfig()
 	
 	-- right now this isn't set up to even run.  only GCC compilers do dependency checking.  so TODO test this.
 	self.compileGetIncludeFilesFlag = '/showIncludes'
-	
+
+	self.compileCppVerFlag = '/std:'
+
 	self.linker = 'link.exe'
 	self.linkLibPathFlag = ''
 	self.linkLibFlag = ''
@@ -721,7 +769,6 @@ f:close()
 end
 
 function MSVC:postConfig()
-	self.compileFlags = self.compileFlags .. ' /std:'..self.cppver
 	if self.build == 'debug' then
 		self.compileFlags = self.compileFlags .. ' /MD'	-- /MT
 	elseif self.build == 'release' then
@@ -916,7 +963,6 @@ end
 
 function ClangWindows:postConfig()
 	self.include:insert(self.home..'/include')
-	self.compileFlags = self.compileFlags .. ' -std='..self.cppver
 
 	if self.distType == 'lib' then
 		self.linkFlags = self.linkFlags .. ' -static'
