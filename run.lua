@@ -53,6 +53,16 @@ local table = require 'ext.table'
 local find = require 'make.find'
 local exec = require 'make.exec'
 
+local cmds = table{...}
+for i=1,#cmds do
+	if cmds[i] == 'platform' then
+		-- set global for env.lua to pick up on prior to calling 'make.detect'
+		platform = cmds[i+1]
+		cmds:remove(i+1)
+		cmds:remove(i)
+	end
+end
+
 -- this either looks at global 'platform' or runs make.detect 
 local Env = require 'make.env'
 local env = Env()
@@ -171,7 +181,6 @@ os.exit()
 	end
 end
 
-local cmds = {...}
 if #cmds == 0 then cmds = {'debug'} end	-- build just debug by default
 for _,cmd in ipairs(cmds) do
 	if cmd == 'all' then

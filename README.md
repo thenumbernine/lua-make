@@ -7,7 +7,7 @@
 First I made a decent Makefile system.
 I got it working on OSX, Linux, MinGW ... all but MSVC.
 Then I found myself wanting to build stuff with MSVC ... without making those stupid .vcproj files, or another NMAKE script, or rewriting everything.
-Because, if you have to rewrite everything, why use a shitty one-platform shit-tool to do it, like MSVC's stuff?
+Because, if you have to rewrite everything, why use a one-platform tool to do it, like MSVC's stuff?
 So I found myself in need of a rewrite.
 Hence this simple build system.
 
@@ -35,7 +35,7 @@ lua /path/to/lua/make/run.lua clean distclean all
 
 if you want a custom platform:
 ```
-lua -e "platform='$PLATFORM'" make.lua
+lua platform $PLATFORM make.lua
 ```
 
 where $PLATFORM can be:
