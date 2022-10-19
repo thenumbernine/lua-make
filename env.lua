@@ -810,12 +810,13 @@ function MSVC:buildDist(dist, objs)
 	assert(#self.libpaths == 0, "can't link to libpaths with windows")
 	
 	local distdir = file(dist):getdir()
+	self:mkdir(distdir)
 	if self.distType == 'lib' then
 		self.linkFlags = self.linkFlags .. ' /dll'
 	end
 
-	local distbase = distdir..'\\'..self.distName
-	local dllfile = dist 
+	local distbase = self:fixpath(distdir..'/'..self.distName)
+	local dllfile = self:fixpath(dist)
 	local pdbName = distbase..'.pdb'
 
 	local status, log
@@ -827,8 +828,6 @@ function MSVC:buildDist(dist, objs)
 		status, log = MSVC.super.buildDist(self, dist, objs)
 	elseif self.distType == 'lib' then
 		print('building '..dist..' from '..table.concat(objs, ' '))
-		local distdir = file(dist):getdir()
-		self:mkdir(distdir)
 
 		-- build the static lib
 		if self.useStatic then
