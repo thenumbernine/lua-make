@@ -77,43 +77,65 @@ function Env:setupBuild(_build)
 	assert(self.distName)
 	assert(self.distType)
 
-	for _,dependDir in ipairs(self.depends) do
-		-- TODO make a function for loading depend info
-		-- esp so I can derive the depend target from the buildinfo
-		self.cwd = dependDir
-		local push_distName = self.distName
-		local push_distType = self.distType
-		local push_depends = self.depends
-		-- hmm, I should think this system through more ...
-		-- in order to allow include buildinfos to modify state (and include things like macros, search paths, etc)
-		-- I shouldn't be pushing/popping them
-		-- but instead, check 'including' to see if a variable should be modified ...
-		--local push_macros = macros
+	-- here we'll need to iterate through all depends, and all their depends, but not repeating
+	local depstodo = table(self.depends)
+	local depssofar = {}
+	
+	while #depstodo > 0 do
+		local dependDir = depstodo:remove(1)
+--print('considering '..dependDir)
+		if not depssofar[dependDir] then
+			depssofar[dependDir] = true
+--print('handling '..dependDir)
+			
+			-- TODO make a function for loading depend info
+			-- esp so I can derive the depend target from the buildinfo
+			self.cwd = dependDir
+			local push_distName = self.distName
+			local push_distType = self.distType
+			local push_depends = self.depends
+			-- hmm, I should think this system through more ...
+			-- in order to allow include buildinfos to modify state (and include things like macros, search paths, etc)
+			-- I shouldn't be pushing/popping them
+			-- but instead, check 'including' to see if a variable should be modified ...
+			--local push_macros = macros
 
-		self.distName = nil
-		self.distType = nil
-		self.depends = table()
-		self.including = true
-		--self:resetMacros()
+			self.distName = nil
+			self.distType = nil
+			self.depends = table()
+			self.including = true
+			--self:resetMacros()
 
-		assert(loadfile(self.cwd..'/buildinfo', 'bt', loadenv))()
-		local dependName = self.distName
---			assert(self.distType == 'lib' or self.distType == 'inc')	--otherwise why are we dependent on it? ... hmm, how about unit tests for applications.
-		self.include:insert(self.cwd..'/include')
-		if (self.platform == 'linux' and self.distType == 'lib' and push_distType == 'app')
-		or (self.platform == 'osx' and self.distType == 'lib')
-		or (self.platform == 'msvc' and self.distType ~= 'inc')
-		or (self.platform == 'mingw' and self.distType ~= 'inc')
-		or (self.platform == 'clang_win' and self.distType ~= 'inc')
-		then
-			self:addDependLib(dependName, self.cwd)
+			assert(loadfile(self.cwd..'/buildinfo', 'bt', loadenv))()
+			local dependName = self.distName
+	--			assert(self.distType == 'lib' or self.distType == 'inc')	--otherwise why are we dependent on it? ... hmm, how about unit tests for applications.
+			self.include:insert(self.cwd..'/include')
+			if (self.platform == 'linux' and self.distType == 'lib' and push_distType == 'app')
+			or (self.platform == 'osx' and self.distType == 'lib')
+			or (self.platform == 'msvc' and self.distType ~= 'inc')
+			or (self.platform == 'mingw' and self.distType ~= 'inc')
+			or (self.platform == 'clang_win' and self.distType ~= 'inc')
+			then
+				self:addDependLib(dependName, self.cwd)
+			end
+
+			local cwdfile = file(self.cwd)
+--print('...got deps:')
+			for i=1,#self.depends do
+--print('.... before cwd append: '..self.depends[i])
+--				local appended = self.cwd .. '/' .. self.depends[i]
+--print('.... after cwd append: '..appended)
+				self.depends[i] = cwdfile(self.depends[i]).path
+--print('.... after path fix: '..self.depends[i])
+			end
+			depstodo:append(self.depends)
+			
+			--macros = push_macros
+			self.distName = push_distName
+			self.distType = push_distType
+			self.including = nil
+			self.depends = push_depends
 		end
-		
-		--macros = push_macros
-		self.distName = push_distName
-		self.distType = push_distType
-		self.depends = push_depends
-		self.including = nil
 	end
 
 	self:postConfig()
