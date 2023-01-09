@@ -74,7 +74,7 @@ if not require 'ext.detect_lfs'() then
 	print("can't find lfs -- can't determine last file modification time -- rebuilding all")
 end
 
-local function needsUpdate(target, depends)
+function env.needsUpdate(target, depends)
 	if not file(target):exists() then return true end
 	
 	local targetAttr = file(target):attr()
@@ -125,7 +125,7 @@ local function doBuild(args)
 			for i,header in ipairs(headers) do
 				local pch = assert(pchs[i])
 				local dependentHeaders = env:getDependentHeaders(header, pch, true)
-				if needsUpdate(header, dependentHeaders) then
+				if env.needsUpdate(header, dependentHeaders) then
 					env:buildPCH(pch, header)
 				end
 			end
@@ -155,7 +155,7 @@ local function doBuild(args)
 					-- *or* the buildinfo has been modified since the obj was created
 					-- then rebuild
 					-- (otherwise you can skip this build)
-					if needsUpdate(obj, table.append({src}, dependentHeaders)) then
+					if env.needsUpdate(obj, table.append({src}, dependentHeaders)) then
 						env:buildObj(obj, src)
 					end
 				end
@@ -169,7 +169,7 @@ print('dist', dist)
 os.exit()
 --]]			
 			
-			if needsUpdate(dist, objs) then
+			if env.needsUpdate(dist, objs) then
 				env:buildDist(dist, objs)
 			end
 
