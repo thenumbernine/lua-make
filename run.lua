@@ -52,6 +52,9 @@ local file = require 'ext.file'
 local table = require 'ext.table'
 local find = require 'make.find'
 local exec = require 'make.exec'
+	
+local Targets = require 'make.targets'
+
 
 local cmds = table{...}
 for i=1,#cmds do
@@ -63,56 +66,45 @@ for i=1,#cmds do
 	end
 end
 
--- this either looks at global 'platform' or runs make.detect 
-local Env = require 'make.env'
-local env = Env()
-print("using environment: "..env.name)
-
-
 -- this is internal to ext, but it is how ext provides the file:attr() wrapper
 if not require 'ext.detect_lfs'() then 
 	print("can't find lfs -- can't determine last file modification time -- rebuilding all")
 end
 
-function env.needsUpdate(target, depends)
-	if not file(target):exists() then return true end
-	
-	local targetAttr = file(target):attr()
-	if not targetAttr then return true end
+-- this either looks at global 'platform' or runs make.detect 
+local Env = require 'make.env'
+print("using environment: "..Env.name)
 
-	local dependModification
-	for _,depend in ipairs(depends) do
-		local dependAttr = assert(file(depend):attr())
-		if not dependModification then
-			dependModification = dependAttr.modification
-		else
-			if dependAttr.modification > dependModification then
-				dependModification = dependAttr.modification
-			end
-		end
-	end
-	if not dependModification then
-		print('failed to find any dependency modification timestamp -- rebuilding')
-		return true
-	end
-	
-	-- if the newest dependency modification time is newer than the target time then rebuild
-	if dependModification > targetAttr.modification then
-		return true
-	end
-
-	local date = function(...) return os.date('%Y-%m-%d %H:%M:%S', ...) end
-	print('target up-to-date: '..target
-		..' ('..date(targetAttr.modification)
-		..' vs '..date(dependModification)
-		..')')
-	return false
+-- static method
+function Env.needsUpdate(target, depends)
+	local targets = Targets()
+	targets.verbose = true
+	return targets:needsUpdate{
+		dsts = {target},
+		srcs = depends,
+	}
 end
 
+local env = Env()
+
+--[[
+TODO change this into a file-based rule system
+make it modular
+then use it in cl/obj/program.lua for compiling code->cl->bin
+--]]
 local function doBuild(args)
 	args = args or {}
 	for _,_build in ipairs(args.buildTypes or {'debug', 'release'}) do
+		
+		-- TODO should I be doing this?  or should I be building a new Env() object for each platform?
+		-- but to rebuild env means what env do we use for cmdline cmds below?
 		env:setupBuild(_build)
+		
+		-- making a separate 'targets' per build-type because
+		-- for each 'targets' I'm using a separate env:setupBuild
+		-- so things are distinctly separate / state-based
+		local targets = Targets()
+		targets.verbose = true
 		
 		--[[ build pch
 		do
@@ -144,10 +136,13 @@ local function doBuild(args)
 			end)
 
 			if not args.distonly then
+				
+
 				for i,obj in ipairs(objs) do
 					local src = assert(srcs[i])
 
 					-- see if we can search for the include the files that this source file depends on
+					-- TODO this as a rule so we don't have to regenerate them for untouched files
 					local dependentHeaders = env:getDependentHeaders(src, obj)
 					
 					-- if the source file has been modified since the obj was created
@@ -155,28 +150,33 @@ local function doBuild(args)
 					-- *or* the buildinfo has been modified since the obj was created
 					-- then rebuild
 					-- (otherwise you can skip this build)
-					if env.needsUpdate(obj, table.append({src}, dependentHeaders)) then
-						env:buildObj(obj, src)
-					end
+					targets:add{
+						dsts = {obj},
+						srcs = table.append({src}, dependentHeaders),
+						rule = function()
+							env:buildObj(obj, src)
+						end,
+					}
 				end
+				
+				targets:run(objs:unpack())
 			end
 
 			local dist = env:getDist()
---[[
-print('distSuffix', distSuffix)
-print('distdir', distdir)
-print('dist', dist)
-os.exit()
---]]			
-			
-			if env.needsUpdate(dist, objs) then
-				env:buildDist(dist, objs)
-			end
 
-			-- if postBuildDist is defined then do that too
-			if env.postBuildDist then
-				env.postBuildDist(env:getResourcePath(dist))
-			end
+			targets:add{
+				dsts = {dist},
+				srcs = objs,
+				rule = function()
+					env:buildDist(dist, objs)
+				end,
+			}
+			targets:run(dist)
+		end
+
+		-- if postBuildDist is defined then do that too
+		if env.postBuildDist then
+			env.postBuildDist(env:getResourcePath(dist))
 		end
 	end
 end
