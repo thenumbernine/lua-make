@@ -19,6 +19,7 @@ function Env:init()
 	self.includeDir = 'include'
 	self.objDir = 'obj'
 	self.distDir = 'dist'
+	self.incDepDir = 'incdep'	-- where to put include file dependencies
 	--self.pchDir = 'incbin'
 end
 
@@ -37,7 +38,7 @@ function Env:preConfig()
 	self:resetMacros()
 
 	self.pthread = false
-	self.include = table{'include'}
+	self.include = table{self.includeDir}
 	self.libpaths = table()
 	self.libs = table()
 	self.dependLibs = table()
@@ -293,12 +294,13 @@ function Env:getResourcePath()
 end
 
 function Env:clean()
-	self:exec'rm -fr obj'
-	self:exec'rm -fr incbin'
+	self:exec('rm -fr '..self.objDir)
+	self:exec('rm -fr '..self.incDepDir)
+	--self:exec('rm -fr '..self.pchDir)
 end
 
 function Env:distclean()
-	self:exec'rm -fr dist'
+	self:exec('rm -fr '..self.distDir)
 end
 
 function Env:getDependentHeaders(src,obj)
@@ -351,35 +353,54 @@ function GCC:postConfig()
 	GCC.super.postConfig(self)
 end
 
+-- notice if buildingPCH is false then 'obj' is only used for verification of the dest file format
 function GCC:getDependentHeaders(src, obj, buildingPCH)
 	self:mkdir(file(obj):getdir())
-	-- copied from buildObject ... so maybe borrow that?
-	local cmd = table{
-		self.compiler,
-		self.compileFlags,
-		self.compileCppVerFlag..self.cppver,
-	}:append{
-		buildingPCH and '-x c++-header' or nil,
-	}:append(self.macros:map(function(macro)
-		-- matches Env:buildObj
-		if macro:find' ' or macro:find'"' then
-			macro = '"'..macro:gsub('"', '\\"')..'"'
-		end
-		return self.compileMacroFlag..macro
-	end)):append(self.include:map(function(path)
-		return self.compileIncludeFlag..self:fixpath(path)
-	end))
-	--[[
-	:append{
-		self.compileOutputFlag..self:fixpath(obj),
-	}
-	--]]
-	:concat' '
-	..' '..self.compileGetIncludeFilesFlag..' '..self:fixpath(src)
 
-	-- copied from self:exec() ... so maybe borrow that too?
-	print('>> '..cmd)
-	local results = io.readproc(cmd)
+	-- where to put the file that holds the header info
+	local incDepPath = self.incDepDir..'/'..self.platform..'/'..self.build
+	self:mkdir(incDepPath)
+
+	-- TODO terminology ... first-dir-name vs full path to dir vs full path to file
+	local incdepfn = src:gsub('^'..self.srcDir..'/', incDepPath..'/')
+	incdepfn = incdepfn:gsub('%.cpp$', '.incdep')	-- what suffix do lists of include files have?
+
+	-- use the targets system so we dont have to rebuild it if the source file wasn't touched
+	self.targets:add{
+		dsts = {incdepfn},
+		srcs = {src},
+		rule = function(r)
+			-- copied from buildObject ... so maybe borrow that?
+			self:exec(table{
+				self.compiler,
+				self.compileFlags,
+				self.compileCppVerFlag..self.cppver,
+			}:append{
+				buildingPCH and '-x c++-header' or nil,
+			}:append(self.macros:map(function(macro)
+				-- matches Env:buildObj
+				if macro:find' ' or macro:find'"' then
+					macro = '"'..macro:gsub('"', '\\"')..'"'
+				end
+				return self.compileMacroFlag..macro
+			end)):append(self.include:map(function(path)
+				return self.compileIncludeFlag..self:fixpath(path)
+			end))
+			--[[
+			:append{
+				self.compileOutputFlag..self:fixpath(obj),
+			}
+			--]]
+			:append{
+				self.compileGetIncludeFilesFlag,
+				self:fixpath(src),
+				'>',incdepfn
+			}:concat' ')
+		end,
+	}
+	self.targets:run(incdepfn)
+
+	local results = assert(file(incdepfn):read(), "failed to find include dependency file")
 	results = results:gsub('\\', ' '):gsub('%s+', '\n')
 	results = string.split(string.trim(results), '\n')
 	-- TODO if I'm getting dependent headers *on* headers ... then the results still come back as .o extension
