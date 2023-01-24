@@ -6,7 +6,7 @@ cmd is: build debug release clean distclean
 
 globals defined per-project:
 distName = name of the project
-distType = type of the project.  
+distType = type of the project.
 	possible options are:
 		'app' for applications / executables
 		'lib' for libraries
@@ -67,11 +67,11 @@ for i=1,#cmds do
 end
 
 -- this is internal to ext, but it is how ext provides the file:attr() wrapper
-if not require 'ext.detect_lfs'() then 
+if not require 'ext.detect_lfs'() then
 	print("can't find lfs -- can't determine last file modification time -- rebuilding all")
 end
 
--- this either looks at global 'platform' or runs make.detect 
+-- this either looks at global 'platform' or runs make.detect
 local Env = require 'make.env'
 print("using environment: "..Env.name)
 
@@ -103,15 +103,14 @@ local function doBuild(args)
 		-- making a separate 'targets' per build-type because
 		-- for each 'targets' I'm using a separate env:setupBuild
 		-- so things are distinctly separate / state-based
-		local targets = Targets()
-		targets.verbose = true
+		env.targets.verbose = true
 		
 		--[[ build pch
 		do
 			local headers = env:getHeaders()	-- 'include' folder
 			local pchs = headers:map(function(f)
 				f = f:gsub('^include/', 'incbin/'..env.platform..'/'..env.build..'/')
-				f = f .. '.gch' 
+				f = f .. '.gch'
 				return f
 			end)
 			for i,header in ipairs(headers) do
@@ -148,7 +147,7 @@ local function doBuild(args)
 					-- *or* the buildinfo has been modified since the obj was created
 					-- then rebuild
 					-- (otherwise you can skip this build)
-					targets:add{
+					env.targets:add{
 						dsts = {obj},
 						srcs = table.append({src}, dependentHeaders),
 						rule = function()
@@ -159,20 +158,20 @@ local function doBuild(args)
 			end
 
 			local dist = env:getDist()
-
-			targets:add{
+			env.targets:add{
 				dsts = {dist},
 				srcs = objs,
 				rule = function()
 					env:buildDist(dist, objs)
 				end,
 			}
-			targets:run(dist)
+
+			env.targets:run(dist)
 		end
 
 		-- if postBuildDist is defined then do that too
 		if env.postBuildDist then
-			env.postBuildDist(env:getResourcePath(dist))
+			env.postBuildDist(env:getResourcePath())
 		end
 	end
 end
@@ -186,7 +185,7 @@ for _,cmd in ipairs(cmds) do
 	elseif cmd == 'clean' then
 		local env = Env()
 		env:clean()
-	elseif cmd == 'distclean' then	
+	elseif cmd == 'distclean' then
 		local env = Env()
 		env:distclean()
 	elseif cmd == 'distonly' then
@@ -197,7 +196,7 @@ for _,cmd in ipairs(cmds) do
 		cmdargs:removeObject'depends'
 		
 		-- TODO set up for each debug/release buildType and recurse into dependencies separately
-		-- until then, I'll just gather for one specific build type and recurse through those and reissue all 
+		-- until then, I'll just gather for one specific build type and recurse through those and reissue all
 		local depends
 		do
 			tmpenv = Env()

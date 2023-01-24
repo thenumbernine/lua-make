@@ -1,6 +1,6 @@
 local function exec(cmd, must, platform)
 	print('>> '..cmd)
-	if must or must == nil then 
+	if must or must == nil then
 		local result, why, errno = os.execute(cmd)
 		if not result then
 			if not (({

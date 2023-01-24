@@ -15,10 +15,10 @@ targets = Targets()
 targets:add{
 	dsts = {'a.out'},
 	srcs = {'a.cpp'},
-	rule = function()	
-	-- or maybe string-only optional for just a shell command?  
+	rule = function()
+	-- or maybe string-only optional for just a shell command?
 	-- tho stuff like -M for getting the include graph would be useful to do as a function
-	-- or I could do the -M thing as a file dependency too ...	
+	-- or I could do the -M thing as a file dependency too ...
 	end,
 }
 targets:run('dst1', 'dst2', ...)	-- should this be by some extra .name field, or should it be by .dsts? matching one .dsts?  matching all? how would that work.
@@ -51,11 +51,11 @@ function Targets:needsUpdate(rule)
 		
 		local dstAttr = file(dst):attr()
 		-- if any dsts can't be attr'd then I guess it's gotta be rebuilt
-		if not dstAttr then 
+		if not dstAttr then
 			if self.verbose then
 				print(' *** found a dest with no stats -- rebuilding')
 			end
-			return true 
+			return true
 		end
 		if not dstModTime then
 			dstModTime = dstAttr.modification
@@ -104,10 +104,15 @@ function Targets:run(...)
 	local indexes = {}
 	for i=1,select('#', ...) do
 		local dst = select(i, ...)
+		local found
 		for j,r in ipairs(self) do
 			if table.find(r.dsts, dst) then
+				found = true
 				indexes[j] = true
 			end
+		end
+		if not found then
+			error("failed to find in any rule target "..dst)
 		end
 	end
 	indexes = table.keys(indexes):sort()

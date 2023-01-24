@@ -3,14 +3,16 @@ local table = require 'ext.table'
 local file = require 'ext.file'
 local io = require 'ext.io'
 local string = require 'ext.string'
+local template = require 'template'
 local find = require 'make.find'
 local exec = require 'make.exec'
-local template = require 'template'
-
+local Targets = require 'make.targets'
 
 local Env = class()
 
 function Env:init()
+	require 'ext.env'(self)
+	self.targets = Targets()
 	self.env = self
 	self.home = os.getenv'HOME' or os.getenv'USERPROFILE'
 	self.srcDir = 'src'
@@ -35,7 +37,7 @@ function Env:preConfig()
 	self:resetMacros()
 
 	self.pthread = false
-	self.include = table{'include'} 
+	self.include = table{'include'}
 	self.libpaths = table()
 	self.libs = table()
 	self.dependLibs = table()
@@ -164,7 +166,7 @@ function Env:getPathToObj()
 	return self.objDir..'/'..self.platform..'/'..self.build
 end
 
--- TODO should OSX override this?  
+-- TODO should OSX override this?
 -- cuz i think its just messing with DistSuffix to append dirs
 -- and as long as it is doing that, I'll have to use file(dist):getdir() everywhere
 function Env:getPathToDist()
@@ -189,17 +191,17 @@ function Env:buildObj(obj, src)
 			self.compiler,
 			self.compileFlags,
 			self.compileCppVerFlag..self.cppver,
-		}:append(self.include:map(function(path) 
-			return self.compileIncludeFlag..self:fixpath(path) 
-		end)):append(self.macros:map(function(macro) 
-			-- how to handle macro values with quotes? 
+		}:append(self.include:map(function(path)
+			return self.compileIncludeFlag..self:fixpath(path)
+		end)):append(self.macros:map(function(macro)
+			-- how to handle macro values with quotes?
 			-- yes I ran into this on msvc
 			-- how do osx/linux handle quotes and spaces in macros?
 			-- what is the complete list of characters that need to be escaped?
 			if macro:find' ' or macro:find'"' then
 				macro = '"'..macro:gsub('"', '\\"')..'"'
 			end
-			return self.compileMacroFlag..macro 
+			return self.compileMacroFlag..macro
 		end)):append{
 			self.compileOutputFlag..self:fixpath(obj),
 			self:fixpath(src)
@@ -230,13 +232,13 @@ function Env:buildPCH(pch, header)
 			self.compileCppVerFlag..self.cppver,
 			'-x c++-header',
 			--'-Wno-pragma-once-outside-header',	-- clang-specific ... doesn't work in gcc
-		}:append(self.include:map(function(path) 
-			return self.compileIncludeFlag..self:fixpath(path) 
-		end)):append(self.macros:map(function(macro) 
+		}:append(self.include:map(function(path)
+			return self.compileIncludeFlag..self:fixpath(path)
+		end)):append(self.macros:map(function(macro)
 			if macro:find' ' or macro:find'"' then
 				macro = '"'..macro:gsub('"', '\\"')..'"'
 			end
-			return self.compileMacroFlag..macro 
+			return self.compileMacroFlag..macro
 		end)):append{
 			self.compileOutputFlag..self:fixpath(pch),
 			self:fixpath(header)
@@ -265,7 +267,7 @@ end
 
 function Env:buildDist(dist, objs)
 	objs = table(objs)
-	print('building '..dist..' from '..objs:concat' ')	
+	print('building '..dist..' from '..objs:concat' ')
 	local distdir = file(dist):getdir()
 	self:mkdir(distdir)
 	self:exec(
@@ -286,8 +288,8 @@ function Env:buildDist(dist, objs)
 	return true, log
 end
 
-function Env:getResourcePath(dist)
-	return self:getPathToDist() 
+function Env:getResourcePath()
+	return self:getPathToDist()
 end
 
 function Env:clean()
@@ -358,14 +360,14 @@ function GCC:getDependentHeaders(src, obj, buildingPCH)
 		self.compileCppVerFlag..self.cppver,
 	}:append{
 		buildingPCH and '-x c++-header' or nil,
-	}:append(self.macros:map(function(macro) 
+	}:append(self.macros:map(function(macro)
 		-- matches Env:buildObj
 		if macro:find' ' or macro:find'"' then
 			macro = '"'..macro:gsub('"', '\\"')..'"'
 		end
-		return self.compileMacroFlag..macro 
-	end)):append(self.include:map(function(path) 
-		return self.compileIncludeFlag..self:fixpath(path) 
+		return self.compileMacroFlag..macro
+	end)):append(self.include:map(function(path)
+		return self.compileIncludeFlag..self:fixpath(path)
 	end))
 	--[[
 	:append{
@@ -382,7 +384,7 @@ function GCC:getDependentHeaders(src, obj, buildingPCH)
 	results = string.split(string.trim(results), '\n')
 	-- TODO if I'm getting dependent headers *on* headers ... then the results still come back as .o extension
 	local objname = select(2, file(obj):getdir())
-	if buildingPCH then 
+	if buildingPCH then
 		objname = objname:gsub('%.h.gch$', '.o')
 	end
 	assert(results[1] == objname..':', results[1]..' should be '..objname)
@@ -404,7 +406,7 @@ local function splitPkgConfigArgs(s, prefix)
 	end
 	if #t == 1 and #t[1] == 0 then t:remove(1) end
 	-- idk what I'll do about qoute-wrapped args ...
-	if prefix then 
+	if prefix then
 		t = t:mapi(function(fn)
 			assert(fn:sub(1,#prefix) == prefix, "hmm, pkg-config argument expected to have prefix "..prefix.." but didn't have it: "..fn)
 			return fn:sub(#prefix+1)
@@ -417,7 +419,7 @@ function GCC:addPackages(...)
 	-- if I wanted I could parse things out manually and put them in their appropriate variables ...
 	-- and maybe there's a benefit to that, for future commands to detect whether a path or file has been included yet ...
 	-- but for now, meh:
-	-- on second though, looks like these need to be added *after* all other libs, 
+	-- on second though, looks like these need to be added *after* all other libs,
 	-- so I don't want to just add them here or they'll go *before* ...
 	-- so ... split up it is.
 	for i=1,select('#', ...) do
@@ -464,9 +466,9 @@ function Linux:buildDist(dist, objs)
 		--]]
 		-- [[ copy res/ folder into the dist folder
 		if file'res':exists() then
-			self:exec('cp -R res/* '..self:getResourcePath(dist), true)
+			self:exec('cp -R res/* '..self:getResourcePath(), true)
 			-- TODO
-			-- self:copyTree('*', 'res', self:getResourcePath(dist), true)
+			-- self:copyTree('*', 'res', self:getResourcePath(), true)
 		end
 		--]]
 	end
@@ -507,7 +509,7 @@ TODO some good way to separate callbacks from class methods.  maybe I should't j
 local OSX = class(GCC)
 OSX.name = 'osx'
 
--- TODO 
+-- TODO
 --local OSX = class(GCC, Linux) ?
 
 -- TODO OSX_GCC and OSXClang
@@ -527,7 +529,7 @@ end
 function OSX:postConfig()
 	local dist = self:getDist()
 	local _, distname = file(dist):getdir()
-	if self.distType == 'lib' then	
+	if self.distType == 'lib' then
 		self.linkFlags = self.linkFlags .. ' -dynamiclib -undefined suppress -flat_namespace -install_name @rpath/'..distname
 	end
 	if self.distType == 'app' then
@@ -618,9 +620,8 @@ function OSX:buildDist(dist, objs)
 	return status, log
 end
 
-function OSX:getResourcePath(dist)
-	local distdir = file(dist):getdir()
-	return distdir..'/../Resources'
+function OSX:getResourcePath()
+	return self:getPathToDist()..'/../Resources'
 end
 
 function OSX:addDependLib(dependName, dependDir)
@@ -648,7 +649,7 @@ end
 
 function Windows:copyRes(dist)
 	if file'res':exists() then
-		self:copyTree('*', 'res', self:fixpath(self:getResourcePath(dist)), true)
+		self:copyTree('*', 'res', self:fixpath(self:getResourcePath()), true)
 	end
 end
 
@@ -795,8 +796,8 @@ function MSVC:getSources()
 
 --[=[
 	-- /force:unresolved requires an entry point
-	-- https://stackoverflow.com/questions/24547536/unresolved-external-symbol-displayed-as-an-error-while-forceunresolved-is-used 
-	-- https://msdn.microsoft.com/en-gb/library/windows/desktop/ms682596%28v=vs.85%29.aspx  
+	-- https://stackoverflow.com/questions/24547536/unresolved-external-symbol-displayed-as-an-error-while-forceunresolved-is-used
+	-- https://msdn.microsoft.com/en-gb/library/windows/desktop/ms682596%28v=vs.85%29.aspx
 	if self.distType == 'lib' then
 		-- hmm, now I need a cleanup ...
 		local tmp = (os.tmpname()..'.cpp'):gsub('\\','/')
@@ -843,7 +844,7 @@ function MSVC:postConfig()
 end
 
 function MSVC:addDependLib(dependName, dependDir)
-	-- [[ do this if you want all libs to be staticly linked 
+	-- [[ do this if you want all libs to be staticly linked
 	if self.useStatic then
 		self.dynamicLibs:insert(dependDir
 			..'/'..self:getPathToDist()
@@ -895,11 +896,11 @@ function MSVC:buildDist(dist, objs)
 				}
 				:append(objs)
 				:append{self.distLogFile and ('> '..self.distLogFile..' 2>&1') or nil}
-				:concat' ', 
+				:concat' ',
 				true
 			)
 		
-		-- building DLLs.  
+		-- building DLLs.
 		-- Can't do this until I add all the API export/import macros everywhere ...
 		else
 			self:exec(
@@ -933,7 +934,7 @@ but this only works if we have a 'DllMain' function defined ...
 				true
 			)
 
-			-- [[ 
+			-- [[
 			local defSrcFile = distbase..'.def.txt'
 			self:exec(
 				table{
@@ -944,11 +945,11 @@ but this only works if we have a 'DllMain' function defined ...
 					defSrcFile
 				}
 				:append{self.distLogFile and ('>> '..self.distLogFile..' 2>&1') or nil}
-				:concat' ', 
+				:concat' ',
 				true
 			)
 
-			-- TODO use this trick: https://stackoverflow.com/questions/9946322/how-to-generate-an-import-library-lib-file-from-a-dll  
+			-- TODO use this trick: https://stackoverflow.com/questions/9946322/how-to-generate-an-import-library-lib-file-from-a-dll
 			local deffile = distbase..'.def'
 			file(deffile):write(table{
 				'LIBRARY '..self.distName,
@@ -1043,7 +1044,7 @@ function ClangWindows:buildDist(dist, objs)
 	end
 
 	local distbase = distdir..'\\'..self.distName
-	local dllfile = dist 
+	local dllfile = dist
 	--local pdbName = distbase..'.pdb'
 
 	local status, log
