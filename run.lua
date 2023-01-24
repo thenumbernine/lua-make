@@ -85,7 +85,6 @@ function Env.needsUpdate(target, depends)
 	}
 end
 
-local env = Env()
 
 --[[
 TODO change this into a file-based rule system
@@ -96,6 +95,7 @@ local function doBuild(args)
 	args = args or {}
 	for _,_build in ipairs(args.buildTypes or {'debug', 'release'}) do
 		
+		local env = Env()
 		-- TODO should I be doing this?  or should I be building a new Env() object for each platform?
 		-- but to rebuild env means what env do we use for cmdline cmds below?
 		env:setupBuild(_build)
@@ -130,14 +130,12 @@ local function doBuild(args)
 			print'no input files found'
 		else
 			local objs = srcs:map(function(f)
-				f = f:gsub('^src/', 'obj/'..env.platform..'/'..env.build..'/')
+				f = f:gsub('^'..env.srcDir..'/', env:getPathToObj()..'/')
 				f = f:gsub('%.cpp$', env.objSuffix)
 				return f
 			end)
 
 			if not args.distonly then
-				
-
 				for i,obj in ipairs(objs) do
 					local src = assert(srcs[i])
 
@@ -158,8 +156,6 @@ local function doBuild(args)
 						end,
 					}
 				end
-				
-				targets:run(objs:unpack())
 			end
 
 			local dist = env:getDist()
@@ -188,8 +184,10 @@ for _,cmd in ipairs(cmds) do
 	elseif cmd == 'debug' or cmd == 'release' then
 		doBuild{buildTypes={cmd}}
 	elseif cmd == 'clean' then
+		local env = Env()
 		env:clean()
 	elseif cmd == 'distclean' then	
+		local env = Env()
 		env:distclean()
 	elseif cmd == 'distonly' then
 		doBuild{distonly=true}
@@ -209,6 +207,7 @@ for _,cmd in ipairs(cmds) do
 		
 		for _,depend in ipairs(depends) do
 			-- TODO forward all args, with spaces, etc
+			local env = Env()
 			env:exec('cd "'..depend..'" && lmake '..cmdargs:mapi(function(s) return ('%q'):format(s) end):concat' ', true)
 		end
 	else

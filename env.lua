@@ -13,13 +13,11 @@ local Env = class()
 function Env:init()
 	self.env = self
 	self.home = os.getenv'HOME' or os.getenv'USERPROFILE'
-	--[[ TODO use these
 	self.srcDir = 'src'
 	self.includeDir = 'include'
-	self.pchDir = 'incbin'
 	self.objDir = 'obj'
 	self.distDir = 'dist'
-	--]]
+	--self.pchDir = 'incbin'
 end
 
 function Env:fixpath(s) return s end
@@ -154,7 +152,7 @@ function Env:mkdir(fn)
 end
 
 function Env:getSources()
-	return find('src', '%.cpp$')
+	return find(self.srcDir, '%.cpp$')
 end
 
 function Env:getHeaders()
@@ -162,8 +160,24 @@ function Env:getHeaders()
 	return find('include', '%.h')
 end
 
+function Env:getPathToObj()
+	return self.objDir..'/'..self.platform..'/'..self.build
+end
+
+-- TODO should OSX override this?  
+-- cuz i think its just messing with DistSuffix to append dirs
+-- and as long as it is doing that, I'll have to use file(dist):getdir() everywhere
+function Env:getPathToDist()
+	return self.distDir..'/'..self.platform..'/'..self.build
+end
+
 function Env:addDependLib(dependName, dependDir)
-	self.dynamicLibs:insert(dependDir..'/dist/'..self.platform..'/'..self.build..'/'..self.libPrefix..dependName..self.libSuffix)
+	self.dynamicLibs:insert(
+		dependDir
+		-- TODO hmm technically this should be built from the dependency buildinfo getPathToDist
+		..'/'..self:getPathToDist()
+		..'/'..self.libPrefix..dependName..self.libSuffix
+	)
 end
 
 function Env:buildObj(obj, src)
@@ -241,6 +255,14 @@ function Env:getDistSuffix()
 	return self.distType == 'lib' and self.libSuffix or self.appSuffix
 end
 
+function Env:getDist()
+	local distdir = self:getPathToDist()
+	local distPrefix = self.distType == 'lib' and self.libPrefix or ''
+	local distSuffix = self:getDistSuffix(distPrefix)
+	local dist = distdir..'/'..distPrefix..self.distName..distSuffix
+	return dist
+end
+
 function Env:buildDist(dist, objs)
 	objs = table(objs)
 	print('building '..dist..' from '..objs:concat' ')	
@@ -264,16 +286,8 @@ function Env:buildDist(dist, objs)
 	return true, log
 end
 
-function Env:getDist()
-	local distPrefix = self.distType == 'lib' and self.libPrefix or ''
-	local distSuffix = self:getDistSuffix(distPrefix)
-	local distdir = 'dist/'..self.platform..'/'..self.build
-	local dist = distdir..'/'..distPrefix..self.distName..distSuffix
-	return dist
-end
-
 function Env:getResourcePath(dist)
-	return 'dist/'..self.platform..'/'..self.build
+	return self:getPathToDist() 
 end
 
 function Env:clean()
@@ -461,7 +475,9 @@ end
 
 function Linux:addDependLib(dependName, dependDir)
 	local deplibname = self.libPrefix..dependName..self.libSuffix
-	local deplibdir = dependDir..'/dist/'..self.platform..'/'..self.build
+	local deplibdir = dependDir
+		-- TODO hmm technically this should be built from the dependency buildinfo getPathToDist
+		..'/'..self:getPathToDist()
 	local deplib = deplibdir..'/'..deplibname
 	-- [[ using -l and -L
 	self.libs:insert(1, dependName)
@@ -609,7 +625,11 @@ end
 
 function OSX:addDependLib(dependName, dependDir)
 	-- same as linux:
-	self.dynamicLibs:insert(dependDir..'/dist/'..self.platform..'/'..self.build..'/'..self.libPrefix..dependName..self.libSuffix)
+	self.dynamicLibs:insert(
+		dependDir
+		-- TODO hmm technically this should be built from the dependency buildinfo getPathToDist
+		..'/'..self:getPathToDist()
+		..'/'..self.libPrefix..dependName..self.libSuffix)
 	self.dependLibs:insert(self.dynamicLibs:last())
 end
 
@@ -650,7 +670,10 @@ function MinGW:preConfig()
 end
 
 function MinGW:addDependLib(dependName, dependDir)
-	self.dynamicLibs:insert(dependDir..'/dist/'..self.platform..'/'..self.build..'/'..self.libPrefix..dependName..self.libSuffix)
+	self.dynamicLibs:insert(dependDir
+		-- TODO hmm technically this should be built from the dependency buildinfo getPathToDist
+		..'/'..self:getPathToDist()
+		..'/'..self.libPrefix..dependName..self.libSuffix)
 	self.dependLibs:insert(self.dynamicLibs:last())
 end
 
@@ -667,7 +690,7 @@ function MinGW:postConfig()
 	--[=[ I never got static *or* dynamic working with g++.exe due to my leaving one method external of the dll...
 	--		so I'm just using ar instead
 	if self.distType == 'lib' then
-		--self.linkFlags = self.linkFlags .. ' -static -Wl,--out-implib,--enable-auto-import,dist/'..self.platform..'/'..build..'/'..self.libPrefix..self.distName..'.a'
+		--self.linkFlags = self.linkFlags .. ' -static -Wl,--out-implib,--enable-auto-import,'..self:getPathToDist()..'/'..self.libPrefix..self.distName..'.a'
 		--self.compileFlags = self.compileFlags .. [[ -Wl,--unresolved-symbols=ignore-in-object-files]]
 		--self.compileFlags = self.compileFlags .. [[ -Wl,--unresolved-symbols=ignore-in-shared-libs]]
 		--self.compileFlags = self.compileFlags .. [[ -Wl,--warn-unresolved-symbols]]
@@ -705,11 +728,13 @@ end
 function MinGW:addDependLib(dependName, dependDir)
 	-- [[ using -l and -L
 	--libs:insert(1, dependName..'-static')
-	self.libpaths:insert(dependDir..'/dist/'..self.platform..'/'..self.build)
+	self.libpaths:insert(dependDir
+		-- TODO hmm technically this should be built from the dependency buildinfo getPathToDist
+		..'/'..self:getPathToDist())
 	self.dependLibs:insert(dependName..'-static')
 	--]]
 	--[[ adding the .so
-	self.dynamicLibs:insert(dependDir..'/dist/'..self.platform..'/'..self.build..'/'..self.libPrefix..dependName..self.libSuffix)
+	self.dynamicLibs:insert(dependDir..'/'..self:getPathToDist()..'/'..self.libPrefix..dependName..self.libSuffix)
 	self.dependLibs:insert(self.dynamicLibs:last())
 	--]]
 end
@@ -820,9 +845,13 @@ end
 function MSVC:addDependLib(dependName, dependDir)
 	-- [[ do this if you want all libs to be staticly linked 
 	if self.useStatic then
-		self.dynamicLibs:insert(dependDir..'/dist/'..self.platform..'/'..self.build..'/'..dependName..'-static.lib')
+		self.dynamicLibs:insert(dependDir
+			..'/'..self:getPathToDist()
+			..'/'..dependName..'-static.lib')
 	else
-		self.dynamicLibs:insert(dependDir..'/dist/'..self.platform..'/'..self.build..'/'..dependName..'.lib')
+		self.dynamicLibs:insert(dependDir
+			..'/'..self:getPathToDist()
+			..'/'..dependName..'.lib')
 	end
 	--]]
 end
@@ -989,7 +1018,9 @@ function ClangWindows:preConfig()
 end
 
 function ClangWindows:addDependLib(dependName, dependDir)
-	self.dynamicLibs:insert(dependDir..'/dist/'..self.platform..'/'..self.build..'/'..self.libPrefix..dependName..self.libSuffix)
+	self.dynamicLibs:insert(dependDir
+		..'/'..self:getPathToDist()
+		..'/'..self.libPrefix..dependName..self.libSuffix)
 	self.dependLibs:insert(self.dynamicLibs:last())
 end
 

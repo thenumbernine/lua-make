@@ -30,6 +30,12 @@ local file = require 'ext.file'
 
 local Targets = class()
 
+--[[
+args:
+	dsts
+	srcs
+	rule
+--]]
 function Targets:add(args)
 	assert(args.dsts)
 	assert(args.rule)
@@ -64,6 +70,9 @@ function Targets:needsUpdate(rule)
 	if not dstModTime then error("hmm, seems you have no dsts") end
 
 	local srcModTime
+	if #rule.srcs == 0 then
+		error("no inputs to target")
+	end
 	for _,src in ipairs(rule.srcs) do
 		local srcAttr = assert(file(src):attr())
 		if not srcModTime then
@@ -91,6 +100,7 @@ function Targets:needsUpdate(rule)
 end
 
 function Targets:run(...)
+	local sofar = {}
 	local indexes = {}
 	for i=1,select('#', ...) do
 		local dst = select(i, ...)
@@ -103,8 +113,27 @@ function Targets:run(...)
 	indexes = table.keys(indexes):sort()
 	for _,i in ipairs(indexes) do
 		local r = assert(self[i])
+		
+		-- make sure the source files are all built
+		for _,src in ipairs(r.srcs) do
+			-- if it's not there then rebuild it
+			if not file(src):exists() then
+				if self.verbose then
+					print(' *** building non-existent dependency '..src)
+				end
+				self:run(src)
+				-- if it's still not there then error
+				if not file(src):exists() then
+					error("couldn't build dependency "..src)
+				end
+			end
+		end
+		
 		if self:needsUpdate(r) then
 			r:rule()
+			for _,dst in ipairs(r.dsts) do
+				sofar[dst] = true
+			end
 		end
 	end
 end
