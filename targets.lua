@@ -90,7 +90,7 @@ function Targets:needsUpdate(rule)
 		return true
 	end
 
-	if srcModTime > dstModTime then return true end
+	if srcModTime >= dstModTime then return true end
 	
 	if self.verbose then
 		local date = function(...) return os.date('%Y-%m-%d %H:%M:%S', ...) end
