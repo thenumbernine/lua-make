@@ -10,11 +10,37 @@ Because, if you have to rewrite everything, why use a one-platform tool to do it
 So I found myself in need of a rewrite.
 Hence this simple build system.
 
-It reads files labeled 'buildinfo'
+It reads files labeled `buildinfo`.
 Each buildinfo specifies the distribution name, type, and any dependencies.
-They optionally can have a depend() function that sets up any other dependencies needed for projects that depend on them.
+They optionally can have a `depends` table that specifies the locations of all other dependent lmake-based projects.
+More configuration information for the `buildinfo` can be found in the `run.lua` file.
 
-usage:
+## Command-Line Usage
+
+If you want shell integration, make this file:
+
+`lmake`:
+```
+#!/usr/bin/env sh
+lua ~/path/to/make/run.lua "$@"
+```
+or for the windows users: `lmake.bat`:
+```
+@echo off
+lua "C:\path\to\make\run.lua" %*
+```
+...with maybe an optional `-lluarocks.require` after `lua` depending on how your lua setup is.
+
+and run it with the following arguments:
+- `lmake clean` = cleans objects
+- `lmake distclean` = cleans executable
+- `lmake` = builds default configuration
+- `lmake all` = builds debug and release
+- `lmake debug` = builds debug
+- `lmake release` = builds release
+- `lmake distonly` = builds dist from objs only
+
+## Lua Usage:
 
 if you're lazy:
 ```
@@ -44,22 +70,11 @@ where $PLATFORM can be:
 - `mingw`
 - `msvc`
 
-or if you want a bit better shell access to run this, make this file:
-lmake:
-```
-#!/usr/bin/env sh
-lua ~/path/to/make/run.lua "$@"
-```
+### As a Lua library:
 
-and run it with the following arguments:
-- `lmake clean` = cleans objects
-- `lmake distclean` = cleans executable
-- `lmake` = builds default configuration
-- `lmake all` = builds debug and release
-- `lmake debug` = builds debug
-- `lmake release` = builds release
-- `lmake distonly` = builds dist from objs only
-
-Alright I want to use this in other scripts,
-The specific Make subclass needs to be selected by the OS.
-The compile cpp to obj and obj to app commands need to be callable from outside.
+I'm using this in a few other places:
+- [cl-cpu](https://github.com/thenumbernine/cl-cpu-lua)
+- [ffi-c](https://github.com/thenumbernine/lua-ffi-c)
+- [lua-include](https://github.com/thenumbernine/include-lua)
+- soon to be my [CL library](https://github.com/thenumbernine/lua-opencl) as I start to use SPIR-V more and more...
+- ...and any other OpenCL project I have made based on that.

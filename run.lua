@@ -1,6 +1,6 @@
 #!/usr/bin/env lua
 --[[
-lua make.lua [cmd]
+lua /path/to/make/run.lua [cmd]
 reads buildinfo
 cmd is: build debug release clean distclean
 
