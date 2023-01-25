@@ -99,19 +99,24 @@ function Targets:needsUpdate(rule)
 	return false
 end
 
+function Targets:ruleIndex(dst)
+	for j,r in ipairs(self) do
+		if table.find(r.dsts, dst) then
+			-- TODO return multiple indexes?
+			return j
+		end
+	end
+end
+
 function Targets:run(...)
 	local sofar = {}
 	local indexes = {}
 	for i=1,select('#', ...) do
 		local dst = select(i, ...)
-		local found
-		for j,r in ipairs(self) do
-			if table.find(r.dsts, dst) then
-				found = true
-				indexes[j] = true
-			end
-		end
-		if not found then
+		local index = self:ruleIndex(dst)
+		if index then
+			indexes[index] = true
+		else
 			error("failed to find in any rule target "..dst)
 		end
 	end
@@ -121,11 +126,10 @@ function Targets:run(...)
 		
 		-- make sure the source files are all built
 		for _,src in ipairs(r.srcs) do
-			-- if it's not there then rebuild it
-			if not file(src):exists() then
-				if self.verbose then
-					print(' *** building non-existent dependency '..src)
-				end
+			-- if 'src' might need to be built too ...
+			if self:ruleIndex(src) then
+				-- make sure it is up to date also ...
+				-- TODO keep track of src's and only check them once per :run(dst) ...
 				self:run(src)
 				-- if it's still not there then error
 				if not file(src):exists() then
