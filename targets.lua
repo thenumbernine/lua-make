@@ -48,7 +48,7 @@ function Targets:needsUpdate(rule)
 	local dstModTime
 	for _,dst in ipairs(rule.dsts) do
 		if not file(dst):exists() then return true end
-		
+
 		local dstAttr = file(dst):attr()
 		-- if any dsts can't be attr'd then I guess it's gotta be rebuilt
 		if not dstAttr then
@@ -91,7 +91,7 @@ function Targets:needsUpdate(rule)
 	end
 
 	if srcModTime >= dstModTime then return true end
-	
+
 	if self.verbose then
 		local date = function(...) return os.date('%Y-%m-%d %H:%M:%S', ...) end
 		print(' *** target up-to-date: '..table.concat(rule.dsts, ', ')..' ('..date(dstModTime)..' vs '..date(srcModTime)..')')
@@ -109,7 +109,6 @@ function Targets:ruleIndex(dst)
 end
 
 function Targets:run(...)
-	local sofar = {}
 	local indexes = {}
 	for i=1,select('#', ...) do
 		local dst = select(i, ...)
@@ -123,7 +122,7 @@ function Targets:run(...)
 	indexes = table.keys(indexes):sort()
 	for _,i in ipairs(indexes) do
 		local r = assert(self[i])
-		
+
 		-- make sure the source files are all built
 		for _,src in ipairs(r.srcs) do
 			-- if 'src' might need to be built too ...
@@ -137,12 +136,9 @@ function Targets:run(...)
 				end
 			end
 		end
-		
+
 		if self:needsUpdate(r) then
 			r:rule()
-			for _,dst in ipairs(r.dsts) do
-				sofar[dst] = true
-			end
 		end
 	end
 end

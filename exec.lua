@@ -1,3 +1,4 @@
+local os = require 'ext.os'	-- make sure os.execute has the right return value api
 local function exec(cmd, must, platform)
 	print('>> '..cmd)
 	if must or must == nil then
@@ -13,7 +14,7 @@ local function exec(cmd, must, platform)
 			end
 		end
 	else
-		os.execute(cmd)
+		return os.execute(cmd)
 	end
 end
 return exec

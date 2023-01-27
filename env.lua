@@ -52,16 +52,16 @@ end
 function Env:setupBuild(_build)
 	self.build = _build
 	print('building '..self.build)
-	
+
 	self.distName = nil
 	self.distType = nil
 	self.depends = table()
-	
+
 	self.cppver = 'c++20'
 
 	self.self = self
 	self:preConfig()
-	
+
 	self.cwd = '.'
 	local loadenv = setmetatable({}, {
 		__index = function(t,k)
@@ -73,7 +73,7 @@ function Env:setupBuild(_build)
 			self[k] = v
 		end,
 	})
-	
+
 	assert(loadfile('buildinfo', 'bt', loadenv))()
 	assert(self.distName)
 	assert(self.distType)
@@ -81,14 +81,14 @@ function Env:setupBuild(_build)
 	-- here we'll need to iterate through all depends, and all their depends, but not repeating
 	local depstodo = table(self.depends)
 	local depssofar = {}
-	
+
 	while #depstodo > 0 do
 		local dependDir = depstodo:remove(1)
 --print('considering '..dependDir)
 		if not depssofar[dependDir] then
 			depssofar[dependDir] = true
 --print('handling '..dependDir)
-			
+
 			-- TODO make a function for loading depend info
 			-- esp so I can derive the depend target from the buildinfo
 			self.cwd = dependDir
@@ -130,7 +130,7 @@ function Env:setupBuild(_build)
 --print('.... after path fix: '..self.depends[i])
 			end
 			depstodo:append(self.depends)
-			
+
 			--macros = push_macros
 			self.distName = push_distName
 			self.distType = push_distType
@@ -447,7 +447,7 @@ function GCC:addPackages(...)
 		local name = select(i, ...)
 		self.include:append(splitPkgConfigArgs(io.readproc('pkg-config --cflags-only-I '..name), '-I'))
 		self.compileFlags = self.compileFlags .. ' ' .. string.trim(io.readproc('pkg-config --cflags-only-other '..name))
-		
+
 		self.libs:append(splitPkgConfigArgs(io.readproc('pkg-config --libs-only-l '..name), '-l'))
 		self.libpaths:append(splitPkgConfigArgs(io.readproc('pkg-config --libs-only-L '..name), '-L'))
 		self.linkFlags = self.linkFlags .. ' ' .. string.trim(io.readproc('pkg-config --libs-only-other '..name))
@@ -542,7 +542,7 @@ function OSX:preConfig()
 
 	-- TODO verify this
 	self.compileGetIncludeFilesFlag = '-H -fsyntax-only -MM'	-- I hear without -H it will search for includes *and* compile
-	
+
 	self.linker = 'clang++'
 	self.libSuffix = '.dylib'
 end
@@ -560,7 +560,7 @@ function OSX:postConfig()
 	-- TODO always use home?  always use /usr/local?
 	--  how to let the user specify?
 	self.include:insert(self.home..'/include')
-	
+
 	if self.build == 'debug' then
 		self.compileFlags = self.compileFlags .. ' -mfix-and-continue'
 	end
@@ -615,11 +615,11 @@ function OSX:buildDist(dist, objs)
 </plist>
 ]], {distname=distname})
 		)
-		
+
 		local resDir = distdir..'/../Resources'
 		local resLibDir = resDir..'/lib'
 		self:mkdir(resLibDir)
-	
+
 		-- copy over Resources
 		if file'res':exists() then
 			self:exec('cp -R res/* '..resDir)
@@ -730,7 +730,7 @@ function MinGW:buildDist(dist, objs)
 	if self.distType == 'lib' then
 		local distdir = file(dist):getdir()
 		self:mkdir(distdir)
-		
+
 		self:exec(table{
 			'ar rcs',
 			dist,
@@ -739,8 +739,8 @@ function MinGW:buildDist(dist, objs)
 	end
 
 	local status, log = MinGW.super.buildDist(self, dist, objs)
-	
-	if distType == 'app' then
+
+	if self.distType == 'app' then
 		self:copyRes(dist)
 	end
 
@@ -796,7 +796,7 @@ function MSVC:preConfig()
 	self.compileOutputFlag = '/Fo'
 	self.compileIncludeFlag = '/I'
 	self.compileMacroFlag = '/D'
-	
+
 	-- right now this isn't set up to even run.  only GCC compilers do dependency checking.  so TODO test this.
 	self.compileGetIncludeFilesFlag = '/showIncludes'
 
@@ -824,7 +824,7 @@ function MSVC:getSources()
 		local tmp = (os.tmpname()..'.cpp'):gsub('\\','/')
 		-- hmm, do i need a .cpp extension?
 		print('attempting to write to '..tmp)
-		
+
 --file(tmp) =
 local f = assert(file(tmp):open'w')
 f:write
@@ -881,7 +881,7 @@ end
 function MSVC:buildDist(dist, objs)
 	-- technically you can ... but I am avoiding these for now
 	assert(#self.libpaths == 0, "can't link to libpaths with windows")
-	
+
 	local distdir = file(dist):getdir()
 	self:mkdir(distdir)
 	if self.distType == 'lib' then
@@ -920,7 +920,7 @@ function MSVC:buildDist(dist, objs)
 				:concat' ',
 				true
 			)
-		
+
 		-- building DLLs.
 		-- Can't do this until I add all the API export/import macros everywhere ...
 		else
@@ -929,7 +929,7 @@ function MSVC:buildDist(dist, objs)
 					'link.exe',
 					'/nologo',
 					'/dll',
-		
+
 --[=[
 here's a dilemma...
 I don't want to put declspecs everywhere in the code just for windows
@@ -941,7 +941,7 @@ but this only works if we have a 'DllMain' function defined ...
 --]=]
 --'/force:unresolved',
 '/incremental',
-				
+
 					'/out:'..dllfile,
 					--'/pdb:'..self:fixpath(pdbName),
 				}
@@ -1121,6 +1121,7 @@ end
 
 -- here's where `-e "platform='gcc'"` comes into play
 local detect = platform or require 'make.detect'()
+--[[
 local env = (table{
 	OSX,
 	Linux,
@@ -1128,6 +1129,7 @@ local env = (table{
 	MinGW,
 	ClangWindows,
 }:map(function(cl) return cl, cl.name end))[detect]
+--]]
 if detect == 'linux' then
 	return Linux
 elseif detect == 'msvc' then

@@ -47,14 +47,8 @@ dynamicLibs
 objLogFile = filename to save output of buildObj
 distLogFile = filename to save output of buildDist
 --]]
-
-local file = require 'ext.file'
 local table = require 'ext.table'
-local find = require 'make.find'
-local exec = require 'make.exec'
-	
 local Targets = require 'make.targets'
-
 
 local cmds = table{...}
 for i=1,#cmds do
@@ -94,17 +88,17 @@ then use it in cl/obj/program.lua for compiling code->cl->bin
 local function doBuild(args)
 	args = args or {}
 	for _,_build in ipairs(args.buildTypes or {'debug', 'release'}) do
-		
+
 		local env = Env()
 		-- TODO should I be doing this?  or should I be building a new Env() object for each platform?
 		-- but to rebuild env means what env do we use for cmdline cmds below?
 		env:setupBuild(_build)
-		
+
 		-- making a separate 'targets' per build-type because
 		-- for each 'targets' I'm using a separate env:setupBuild
 		-- so things are distinctly separate / state-based
 		env.targets.verbose = true
-		
+
 		--[[ build pch
 		do
 			local headers = env:getHeaders()	-- 'include' folder
@@ -141,7 +135,7 @@ local function doBuild(args)
 					-- see if we can search for the include the files that this source file depends on
 					-- TODO this as a rule so we don't have to regenerate them for untouched files
 					local dependentHeaders = env:getDependentHeaders(src, obj)
-					
+
 					-- if the source file has been modified since the obj was created
 					-- *or* the dependent headers have been modified since the obj was created
 					-- *or* the buildinfo has been modified since the obj was created
@@ -194,16 +188,16 @@ for _,cmd in ipairs(cmds) do
 	elseif cmd == 'depends' then
 		local cmdargs = table(cmds)
 		cmdargs:removeObject'depends'
-		
+
 		-- TODO set up for each debug/release buildType and recurse into dependencies separately
 		-- until then, I'll just gather for one specific build type and recurse through those and reissue all
 		local depends
 		do
-			tmpenv = Env()
+			local tmpenv = Env()
 			tmpenv:setupBuild'debug'
 			depends = tmpenv.depends
 		end
-		
+
 		for _,depend in ipairs(depends) do
 			-- TODO forward all args, with spaces, etc
 			local env = Env()
