@@ -31,6 +31,21 @@ local file = require 'ext.file'
 local Targets = class()
 
 --[[
+verbose = verbose
+1...n = list of rules to pass to self:add
+--]]
+function Targets:init(args)
+	if args then
+		if args.verbose ~= nil then
+			self.verbose = args.verbose
+		end
+		for i=1,#args do
+			self:add(args[i])
+		end
+	end
+end
+
+--[[
 args:
 	dsts
 	srcs

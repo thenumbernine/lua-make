@@ -13,6 +13,7 @@ local function exec(cmd, must, platform)
 				assert(result, why, errno)
 			end
 		end
+		return result, why, errno
 	else
 		return os.execute(cmd)
 	end

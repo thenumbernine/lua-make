@@ -71,9 +71,9 @@ print("using environment: "..Env.name)
 
 -- static method
 function Env.needsUpdate(target, depends)
-	local targets = Targets()
-	targets.verbose = true
-	return targets:needsUpdate{
+	return Targets{
+		verbose = true,
+	}:needsUpdate{
 		dsts = {target},
 		srcs = depends,
 	}
