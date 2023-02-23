@@ -139,6 +139,7 @@ function Targets:run(...)
 		local r = assert(self[i])
 
 		-- make sure the source files are all built
+		-- TODO this in parallel?
 		for _,src in ipairs(r.srcs) do
 			-- if 'src' might need to be built too ...
 			if self:ruleIndex(src) then
