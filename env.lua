@@ -51,8 +51,9 @@ end
 
 function Env:setupBuild(_build)
 	self.build = _build
-	print('building '..self.build)
-
+	if self.verbose then
+		print('building '..self.build)
+	end
 	self.distName = nil
 	self.distType = nil
 	self.depends = table()

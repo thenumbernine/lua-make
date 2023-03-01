@@ -90,6 +90,9 @@ local function doBuild(args)
 	for _,_build in ipairs(args.buildTypes or {'debug', 'release'}) do
 
 		local env = Env()
+
+		env.verbose = true
+
 		-- TODO should I be doing this?  or should I be building a new Env() object for each platform?
 		-- but to rebuild env means what env do we use for cmdline cmds below?
 		env:setupBuild(_build)
