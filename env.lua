@@ -2,6 +2,7 @@ local class = require 'ext.class'
 local table = require 'ext.table'
 local file = require 'ext.file'
 local io = require 'ext.io'
+local os = require 'ext.os'
 local string = require 'ext.string'
 local template = require 'template'
 local find = require 'make.find'
@@ -14,7 +15,7 @@ function Env:init()
 	require 'ext.env'(self)
 	self.targets = Targets()
 	self.env = self
-	self.home = os.getenv'HOME' or os.getenv'USERPROFILE'
+	self.home = os.home()
 	self.srcDir = 'src'
 	self.includeDir = 'include'
 	self.objDir = 'obj'
