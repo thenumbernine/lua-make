@@ -372,6 +372,7 @@ function GCC:getDependentHeaders(src, obj, buildingPCH)
 		dsts = {incdepfn},
 		srcs = {src},
 		rule = function(r)
+			file((file(incdepfn):getdir())):mkdir(true)
 			-- copied from buildObject ... so maybe borrow that?
 			self:exec(table{
 				self.compiler,
