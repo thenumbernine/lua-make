@@ -26,7 +26,7 @@ targets:run('dst1', 'dst2', ...)	-- should this be by some extra .name field, or
 --]]
 local class = require 'ext.class'
 local table = require 'ext.table'
-local file = require 'ext.file'
+local path = require 'ext.path'
 
 local Targets = class()
 
@@ -62,9 +62,9 @@ end
 function Targets:needsUpdate(rule)
 	local dstModTime
 	for _,dst in ipairs(rule.dsts) do
-		if not file(dst):exists() then return true end
+		if not path(dst):exists() then return true end
 
-		local dstAttr = file(dst):attr()
+		local dstAttr = path(dst):attr()
 		-- if any dsts can't be attr'd then I guess it's gotta be rebuilt
 		if not dstAttr then
 			if self.verbose then
@@ -89,7 +89,7 @@ function Targets:needsUpdate(rule)
 		error("no inputs to target")
 	end
 	for _,src in ipairs(rule.srcs) do
-		local srcAttr = assert(file(src):attr())
+		local srcAttr = assert(path(src):attr())
 		if not srcModTime then
 			srcModTime = srcAttr.modification
 		else
@@ -147,7 +147,7 @@ function Targets:run(...)
 				-- TODO keep track of src's and only check them once per :run(dst) ...
 				self:run(src)
 				-- if it's still not there then error
-				if not file(src):exists() then
+				if not path(src):exists() then
 					error("couldn't build dependency "..src)
 				end
 			end
