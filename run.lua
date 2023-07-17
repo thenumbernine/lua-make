@@ -60,7 +60,7 @@ for i=1,#cmds do
 	end
 end
 
--- this is internal to ext, but it is how ext provides the file:attr() wrapper
+-- this is internal to ext, but it is how ext provides the path:attr() wrapper
 if not require 'ext.detect_lfs'() then
 	print("can't find lfs -- can't determine last file modification time -- rebuilding all")
 end
