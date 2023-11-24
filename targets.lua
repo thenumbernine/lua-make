@@ -28,6 +28,10 @@ local class = require 'ext.class'
 local table = require 'ext.table'
 local path = require 'ext.path'
 
+local function datestr(...)
+	return os.date('%Y-%m-%d %H:%M:%S', ...)
+end
+
 local Targets = class()
 
 --[[
@@ -105,11 +109,15 @@ function Targets:needsUpdate(rule)
 		return true
 	end
 
-	if srcModTime >= dstModTime then return true end
+	if srcModTime >= dstModTime then
+		if self.verbose then
+			print(' *** target not up-to-date: '..table.concat(rule.dsts, ', ')..' ('..datestr(dstModTime)..' vs '..datestr(srcModTime)..') -- rebuilding!')
+		end
+		return true
+	end
 
 	if self.verbose then
-		local date = function(...) return os.date('%Y-%m-%d %H:%M:%S', ...) end
-		print(' *** target up-to-date: '..table.concat(rule.dsts, ', ')..' ('..date(dstModTime)..' vs '..date(srcModTime)..')')
+		print(' *** target up-to-date: '..table.concat(rule.dsts, ', ')..' ('..datestr(dstModTime)..' vs '..datestr(srcModTime)..')')
 	end
 	return false
 end
