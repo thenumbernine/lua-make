@@ -24,8 +24,6 @@ function Env:init()
 	--self.pchDir = 'incbin'
 end
 
-function Env:fixpath(s) return s end
-
 function Env:resetMacros()
 	self.macros = table{
 		'PLATFORM_'..self.platform:upper(),
@@ -148,6 +146,7 @@ function Env:exec(cmd, must)
 	return exec(cmd, must, self.platform)
 end
 
+-- TODO get rid of this and just use path objects
 function Env:mkdir(fn)
 	if path(fn):exists() then
 		assert(path(fn):isdir(), "tried to mkdir on a file that is not a directory")
@@ -188,14 +187,14 @@ end
 function Env:buildObj(obj, src)
 	print('building '..obj..' from '..src)
 
-	self:mkdir(path(obj):getdir())
+	path(obj):getdir():mkdir(true)
 	self:exec(
 		table{
 			self.compiler,
 			self.compileFlags,
 			self.compileCppVerFlag..self.cppver,
 		}:append(self.include:map(function(pathstr)
-			return self.compileIncludeFlag..self:fixpath(pathstr)
+			return self.compileIncludeFlag..path(pathstr):escape()
 		end)):append(self.macros:map(function(macro)
 			-- how to handle macro values with quotes?
 			-- yes I ran into this on msvc
@@ -206,8 +205,8 @@ function Env:buildObj(obj, src)
 			end
 			return self.compileMacroFlag..macro
 		end)):append{
-			self.compileOutputFlag..self:fixpath(obj),
-			self:fixpath(src)
+			self.compileOutputFlag..path(obj):escape(),
+			path(src):escape()
 		}
 		:append{self.objLogFile and ('> '..self.objLogFile..' 2>&1') or nil}
 		:concat' '
@@ -227,7 +226,7 @@ function Env:buildPCH(pch, header)
 	-- setupBuild() calls postConfig() which modifies compilerFlags permanently
 	--  one way is appending cppver
 
-	self:mkdir(path(pch):getdir())
+	path(pch):getdir():mkdir()
 	self:exec(
 		table{
 			self.compiler,
@@ -236,15 +235,15 @@ function Env:buildPCH(pch, header)
 			'-x c++-header',
 			--'-Wno-pragma-once-outside-header',	-- clang-specific ... doesn't work in gcc
 		}:append(self.include:map(function(pathstr)
-			return self.compileIncludeFlag..self:fixpath(pathstr)
+			return self.compileIncludeFlag..path(pathstr):escape()
 		end)):append(self.macros:map(function(macro)
 			if macro:find' ' or macro:find'"' then
 				macro = '"'..macro:gsub('"', '\\"')..'"'
 			end
 			return self.compileMacroFlag..macro
 		end)):append{
-			self.compileOutputFlag..self:fixpath(pch),
-			self:fixpath(header)
+			self.compileOutputFlag..path(pch):escape(),
+			path(header):escape()
 		}
 		:append{self.objLogFile and ('> '..self.objLogFile..' 2>&1') or nil}
 		:concat' '
@@ -272,14 +271,14 @@ function Env:buildDist(dist, objs)
 	objs = table(objs)
 	print('building '..dist..' from '..objs:concat' ')
 	local distdir = path(dist):getdir()
-	self:mkdir(distdir)
+	distdir:mkdir(true)
 	self:exec(
 		table{self.linker, self.linkFlags}
-		:append(objs:map(function(obj) return self:fixpath(obj) end))
-		:append(self.libpaths:map(function(libpath) return self:fixpath(self.linkLibPathFlag..libpath) end))
-		:append(self.dynamicLibs:map(function(dynlib) return self:fixpath(dynlib) end))
+		:append(objs:map(function(obj) return path(obj):escape() end))
+		:append(self.libpaths:map(function(libpath) return path(self.linkLibPathFlag..libpath):escape() end))
+		:append(self.dynamicLibs:map(function(dynlib) return path(dynlib):escape() end))
 		:append(self.libs:map(function(lib) return self.linkLibFlag..lib end))
-		:append{self.linkOutputFlag..self:fixpath(dist)}
+		:append{self.linkOutputFlag..path(dist):escape()}
 		:append{self.distLogFile and ('> '..self.distLogFile..' 2>&1') or nil}
 		:concat' ',
 		true
@@ -357,11 +356,11 @@ end
 
 -- notice if buildingPCH is false then 'obj' is only used for verification of the dest file format
 function GCC:getDependentHeaders(src, obj, buildingPCH)
-	self:mkdir(path(obj):getdir())
+	path(obj):getdir():mkdir()
 
 	-- where to put the file that holds the header info
 	local incDepPath = self.incDepDir..'/'..self.platform..'/'..self.build
-	self:mkdir(incDepPath)
+	path(incDepPath):mkdir()
 
 	-- TODO terminology ... first-dir-name vs full path to dir vs full path to file
 	local incdepfn = src:gsub('^'..self.srcDir..'/', incDepPath..'/')
@@ -372,7 +371,7 @@ function GCC:getDependentHeaders(src, obj, buildingPCH)
 		dsts = {incdepfn},
 		srcs = {src},
 		rule = function(r)
-			path((path(incdepfn):getdir())):mkdir(true)
+			path(incdepfn):getdir():mkdir(true)
 			-- copied from buildObject ... so maybe borrow that?
 			self:exec(table{
 				self.compiler,
@@ -387,16 +386,16 @@ function GCC:getDependentHeaders(src, obj, buildingPCH)
 				end
 				return self.compileMacroFlag..macro
 			end)):append(self.include:map(function(pathstr)
-				return self.compileIncludeFlag..self:fixpath(pathstr)
+				return self.compileIncludeFlag..path(pathstr):escape()
 			end))
 			--[[
 			:append{
-				self.compileOutputFlag..self:fixpath(obj),
+				self.compileOutputFlag..path(obj):escape(),
 			}
 			--]]
 			:append{
 				self.compileGetIncludeFilesFlag,
-				self:fixpath(src),
+				path(src):escape(),
 				'>',incdepfn
 			}:concat' ')
 		end,
@@ -479,13 +478,13 @@ function Linux:buildDist(dist, objs)
 		-- this way the app can be run from dist/linux/$build
 		-- but it looks like I'm setting rpath to lib/, so ...
 		local distdir = path(dist):getdir()
-		local libdir = distdir..'/lib'		-- TODO getLibraryPath ?
-		self:mkdir(libdir)
+		local libdir = distdir/'lib'		-- TODO getLibraryPath ?
+		libdir:mkdir()
 		for _,src in ipairs(self.dependLibs) do
 			local _, name = path(src):getdir()
-			local dst = libdir..'/'..name
+			local dst = libdir/name
 			print('copying from '..src..' to '..dst)
-			self:exec('cp '..src..' '..dst)
+			self:exec('cp "'..src..'" "'..dst..'"')
 		end
 		--]]
 		-- [[ copy res/ folder into the dist folder
@@ -581,9 +580,9 @@ function OSX:buildDist(dist, objs)
 	if not status then return status end
 	if self.distType == 'app' then
 		local distdir, distname = path(dist):getdir()
-		distdir = distdir or '.'
-		path(distdir..'/../PkgInfo'):write'APPLhect'
-		path(distdir..'/../Info.plist'):write(template([[
+		distdir = distdir or path	-- path == '.' object, path:cwd() is the abs path ... hmm ...
+		(distdir/'../PkgInfo'):write'APPLhect'
+		(distdir/'../Info.plist'):write(template([[
 <?='<'..'?'?>xml version="1.0" encoding="UTF-8"<?='?'..'>'?>
 <!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -619,13 +618,13 @@ function OSX:buildDist(dist, objs)
 ]], {distname=distname})
 		)
 
-		local resDir = distdir..'/../Resources'
-		local resLibDir = resDir..'/lib'
-		self:mkdir(resLibDir)
+		local resDir = distdir/'../Resources'
+		local resLibDir = resDir/'lib'
+		resLibDir:mkdir()
 
 		-- copy over Resources
 		if path'res':exists() then
-			self:exec('cp -R res/* '..resDir)
+			self:exec('cp -R res/* "'..resDir..'"')
 			-- TODO
 			-- self:copyTree('*', 'res', resDir)
 		end
@@ -634,9 +633,9 @@ function OSX:buildDist(dist, objs)
 		-- and make sure their rpath is correct
 		for _,src in ipairs(self.dynamicLibs) do
 			local _, name = path(src):getdir()
-			local dst = resLibDir..'/'..name
+			local dst = resLibDir/name
 			print('copying from '..src..' to '..dst)
-			self:exec('cp '..src..' '..dst)
+			self:exec('cp "'..src..'" "'..dst..'"')
 			self:exec('install_name_tool -change '..src..' \\@executable_path/../Resources/lib/'..name..' '..dist)
 			self:exec('install_name_tool -change \\@rpath/'..name..' \\@executable_path/../Resources/lib/'..name..' '..dist)
 		end
@@ -661,19 +660,13 @@ end
 
 local Windows = class()
 
-function Windows:fixpath(pathstr)
-	pathstr = pathstr:gsub('/', '\\')
-	if pathstr:find' ' then pathstr = '"'..pathstr..'"' end
-	return pathstr
-end
-
 function Windows:copyTree(ext, src, dst, must)
 	self:exec('xcopy /Y /E "'..src..'\\'..ext..'" "'..dst..'\\"', must)
 end
 
 function Windows:copyRes(dist)
 	if path'res':exists() then
-		self:copyTree('*', 'res', self:fixpath(self:getResourcePath()), true)
+		self:copyTree('*', 'res', path(self:getResourcePath()):escape(), true)
 	end
 end
 
@@ -732,7 +725,7 @@ end
 function MinGW:buildDist(dist, objs)
 	if self.distType == 'lib' then
 		local distdir = path(dist):getdir()
-		self:mkdir(distdir)
+		distdir:mkdir()
 
 		self:exec(table{
 			'ar rcs',
@@ -886,18 +879,18 @@ function MSVC:buildDist(dist, objs)
 	assert(#self.libpaths == 0, "can't link to libpaths with windows")
 
 	local distdir = path(dist):getdir()
-	self:mkdir(distdir)
+	distdir:mkdir()
 	if self.distType == 'lib' then
 		self.linkFlags = self.linkFlags .. ' /dll'
 	end
 
-	local distbase = self:fixpath(distdir..'/'..self.distName)
-	local dllfile = self:fixpath(dist)
+	local distbase = (distdir/self.distName):fixpathsep()
+	local dllfile = path(dist):escape()
 	local pdbName = distbase..'.pdb'
 
 	local status, log
 	if self.distType == 'app' then
-		self.linkFlags = self.linkFlags .. ' /pdb:'..self:fixpath(pdbName)
+		self.linkFlags = self.linkFlags .. ' /pdb:'..path(pdbName):escape()
 
 		self:copyRes(dist)
 
@@ -916,7 +909,7 @@ function MSVC:buildDist(dist, objs)
 					'/nologo',
 					--'/incremental',	-- now gives a warning: unrecognized option
 					'/nodefaultlib',
-					'/out:'..self:fixpath(staticLibFile),
+					'/out:'..path(staticLibFile):escape(),
 				}
 				:append(objs)
 				:append{self.distLogFile and ('> '..self.distLogFile..' 2>&1') or nil}
@@ -946,7 +939,7 @@ but this only works if we have a 'DllMain' function defined ...
 '/incremental',
 
 					'/out:'..dllfile,
-					--'/pdb:'..self:fixpath(pdbName),
+					--'/pdb:'..path(pdbName):escape(),
 				}
 				--:append(self.libpaths:map(function(libpath) return '/libpath:'..libpath end))
 				--:append(self.libs:map(function(lib) return lib end))
@@ -1026,8 +1019,7 @@ end
 local ClangWindows = class(GCC, Windows)
 ClangWindows.name = 'clang_win'
 
--- don't swap /'s with \'s
---function ClangWindows:fixpath(pathstr) return pathstr end
+-- TODO for ClangWindows don't swap /'s with \'s
 
 function ClangWindows:preConfig()
 	ClangWindows.super.preConfig(self)
@@ -1067,13 +1059,13 @@ function ClangWindows:buildDist(dist, objs)
 		self.linkFlags = self.linkFlags .. ' /dll'
 	end
 
-	local distbase = distdir..'\\'..self.distName
+	local distbase = distdir/self.distName
 	local dllfile = dist
 	--local pdbName = distbase..'.pdb'
 
 	local status, log
 	if self.distType == 'app' then
-		--self.linkFlags = self.linkFlags .. ' /pdb:'..self:fixpath(pdbName)
+		--self.linkFlags = self.linkFlags .. ' /pdb:'..path(pdbName):escape()
 
 		self:copyRes(dist)
 
@@ -1081,7 +1073,7 @@ function ClangWindows:buildDist(dist, objs)
 	elseif self.distType == 'lib' then
 		print('building '..dist..' from '..objs:concat' ')
 		local distdir = path(dist):getdir()
-		self:mkdir(distdir)
+		distdir:mkdir()
 
 -- [=[	-- build the static lib
 		local staticLibFile = distbase..'-static.lib'
@@ -1092,7 +1084,7 @@ function ClangWindows:buildDist(dist, objs)
 				'llvm-lib.exe',
 				'/nologo',
 				--'/nodefaultlib',	-- llvm-lib can't handle this
-				'/out:'..self:fixpath(self.staticLibFile),
+				'/out:'..path(self.staticLibFile):escape(),
 			}
 			:append(objs)
 			:append{self.distLogFile and ('> '..self.distLogFile..' 2>&1') or nil}
