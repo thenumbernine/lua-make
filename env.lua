@@ -504,11 +504,11 @@ function Linux:addDependLib(dependName, dependDir)
 		-- TODO hmm technically this should be built from the dependency buildinfo getPathToDist
 		..'/'..self:getPathToDist()
 	local deplib = deplibdir..'/'..deplibname
-	-- [[ using -l and -L
+	--[[ using -l and -L
 	self.libs:insert(1, dependName)
 	self.libpaths:insert(1, deplibdir)
 	--]]
-	--[[ adding the .so and copying to dist path
+	-- [[ adding the .so and copying to dist path
 	self.dynamicLibs:insert(1, deplib)
 	--]]
 	self.dependLibs:insert(1, deplib)
