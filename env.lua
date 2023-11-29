@@ -143,7 +143,15 @@ function Env:setupBuild(_build)
 end
 
 function Env:exec(cmd, must)
-	return exec(cmd, must, self.platform)
+	-- don't error within exec() ...
+	local result, why, errno = exec(cmd, false, self.platform)
+	if not result then
+		print('...', result, why, errno)
+		if must or must == nil then	-- must? error ...
+			error(tostring(why)..': '..tostring(errno))
+		end
+	end
+	return result, why, errno
 end
 
 -- TODO get rid of this and just use path objects
@@ -188,7 +196,7 @@ function Env:buildObj(obj, src)
 	print('building '..obj..' from '..src)
 
 	path(obj):getdir():mkdir(true)
-	self:exec(
+	local result, msg = self:exec(
 		table{
 			self.compiler,
 			self.compileFlags,
@@ -209,13 +217,15 @@ function Env:buildObj(obj, src)
 			path(src):escape()
 		}
 		:append{self.objLogFile and ('> '..self.objLogFile..' 2>&1') or nil}
-		:concat' '
+		:concat' ',
+		false
 	)
+	-- TODO msg?
 	local log
 	if self.objLogFile then
 		log = path(self.objLogFile):read()
 	end
-	return true, log
+	return result, log
 end
 
 -- very similar to above

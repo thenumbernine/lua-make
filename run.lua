@@ -148,7 +148,7 @@ local function doBuild(args)
 						dsts = {obj},
 						srcs = table.append({src}, dependentHeaders),
 						rule = function()
-							env:buildObj(obj, src)
+							assert(env:buildObj(obj, src))
 						end,
 					}
 				end
