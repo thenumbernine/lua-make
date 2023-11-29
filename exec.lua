@@ -10,7 +10,7 @@ local function exec(cmd, must, platform)
 				mingw=1,
 				clang_win=1,
 			})[platform] and why == 'unknown') then
-				assert(result, why, errno)
+				assert(result, tostring(why)..': '..tostring(errno))
 			end
 		end
 		return result, why, errno
