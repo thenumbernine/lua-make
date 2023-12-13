@@ -77,7 +77,7 @@ local function datestr(t)
 	and ffi.typeof(t) == ffi.typeof'struct timespec'
 	then
 		-- TODO instead ues the C function? so we don't lose bits ...
-		return os.date('%Y-%m-%d %H:%M:%S', tonumber(t.tv_sec))..('.%06f'):format(tonumber(t.tv_nsec)*1e-9)
+		return os.date('%Y-%m-%d %H:%M:%S', tonumber(t.tv_sec))..('.%06d'):format(tonumber(t.tv_nsec/1e+3))
 	else
 		return os.date('%Y-%m-%d %H:%M:%S', t)
 	end
