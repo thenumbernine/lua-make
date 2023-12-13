@@ -27,10 +27,8 @@ targets:run('dst1', 'dst2', ...)	-- should this be by some extra .name field, or
 local class = require 'ext.class'
 local table = require 'ext.table'
 local path = require 'ext.path'
-
-local function datestr(...)
-	return os.date('%Y-%m-%d %H:%M:%S', ...)
-end
+local op = require 'ext.op'
+local ffi = op.land(pcall(require, 'ffi'))
 
 local Targets = class()
 
@@ -61,6 +59,31 @@ function Targets:add(args)
 	table.insert(self, args)
 end
 
+local function times_lt(a, b)
+	if ffi
+	and ffi.typeof(a) == ffi.typeof'struct timespec'
+	then
+		assert(ffi.typeof(b) == ffi.typeof'struct timespec')
+		if a.tv_sec ~= b.tv_sec then return a.tv_sec < b.tv_sec end
+		return a.tv_nsec < b.tv_nsec
+	else
+		-- number?
+		return a < b
+	end
+end
+
+local function datestr(t)
+	if ffi
+	and ffi.typeof(t) == ffi.typeof'struct timespec'
+	then
+		-- TODO instead ues the C function? so we don't lose bits ...
+		return os.date('%Y-%m-%d %H:%M:%S', tonumber(t.tv_sec))..('.%06f'):format(tonumber(t.tv_nsec)*1e-9)
+	else
+		return os.date('%Y-%m-%d %H:%M:%S', t)
+	end
+end
+
+
 -- hmm, merge env.needsUpdate into this?
 -- expects indexed tables. rule.srcs, rule.dsts
 function Targets:needsUpdate(rule)
@@ -76,11 +99,12 @@ function Targets:needsUpdate(rule)
 			end
 			return true
 		end
+		local dstAttrTime = dstAttr.modification_ns or dstAttr.modification
 		if not dstModTime then
-			dstModTime = dstAttr.modification
+			dstModTime = dstAttrTime
 		else
-			if dstAttr.modification < dstModTime then
-				dstModTime = dstAttr.modification
+			if times_lt(dstAttrTime, dstModTime) then
+				dstModTime = dstAttrTime
 			end
 		end
 	end
@@ -94,11 +118,12 @@ function Targets:needsUpdate(rule)
 	end
 	for _,src in ipairs(rule.srcs) do
 		local srcAttr = assert(path(src):attr())
+		local srcAttrTime = srcAttr.modification_ns or srcAttr.modification
 		if not srcModTime then
-			srcModTime = srcAttr.modification
+			srcModTime = srcAttrTime
 		else
-			if srcAttr.modification > srcModTime then
-				srcModTime = srcAttr.modification
+			if times_lt(srcModTime, srcAttrTime) then
+				srcModTime = srcAttrTime
 			end
 		end
 	end
@@ -109,7 +134,7 @@ function Targets:needsUpdate(rule)
 		return true
 	end
 
-	if srcModTime >= dstModTime then
+	if not times_lt(srcModTime, dstModTime) then
 		if self.verbose then
 			print(' *** target not up-to-date: '..table.concat(rule.dsts, ', ')..' ('..datestr(dstModTime)..' vs '..datestr(srcModTime)..') -- rebuilding!')
 		end
