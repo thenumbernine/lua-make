@@ -416,7 +416,7 @@ function GCC:getDependentHeaders(src, obj, buildingPCH)
 	results = results:gsub('\\', ' '):gsub('%s+', '\n')
 	results = string.split(string.trim(results), '\n')
 	-- TODO if I'm getting dependent headers *on* headers ... then the results still come back as .o extension
-	local objname = select(2, path(obj):getdir())
+	local objname = select(2, path(obj):getdir()).path
 	if buildingPCH then
 		objname = objname:gsub('%.h.gch$', '.o')
 	end
@@ -590,7 +590,7 @@ function OSX:buildDist(dist, objs)
 	if not status then return status end
 	if self.distType == 'app' then
 		local distdir, distname = path(dist):getdir()
-		distdir = distdir or path	-- path == '.' object, path:cwd() is the abs path ... hmm ...
+		distdir = distdir or path'.'
 		(distdir/'../PkgInfo'):write'APPLhect'
 		(distdir/'../Info.plist'):write(template([[
 <?='<'..'?'?>xml version="1.0" encoding="UTF-8"<?='?'..'>'?>
