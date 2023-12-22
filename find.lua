@@ -10,7 +10,7 @@ local function find(dir, pattern)
 	end) do
 		fs:insert(f)
 	end
-	return f
+	return fs
 end
 
 return find
