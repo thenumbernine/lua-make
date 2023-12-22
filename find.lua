@@ -8,7 +8,7 @@ local function find(dir, pattern)
 	for f in dir:rdir(function(pathstr, isdir)
 		return isdir or not pattern or pathstr:match(pattern)
 	end) do
-		fs:insert(f)
+		fs:insert(f.path)
 	end
 	return fs
 end
