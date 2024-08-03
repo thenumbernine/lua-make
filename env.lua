@@ -126,7 +126,7 @@ function Env:setupBuild(_build)
 --print('.... before cwd append: '..self.depends[i])
 --				local appended = self.cwd .. '/' .. self.depends[i]
 --print('.... after cwd append: '..appended)
-				self.depends[i] = cwdfile(self.depends[i]).path
+				self.depends[i] = (cwdfile / self.depends[i]).path
 --print('.... after path fix: '..self.depends[i])
 			end
 			depstodo:append(self.depends)
@@ -152,15 +152,6 @@ function Env:exec(cmd, must)
 		end
 	end
 	return result, why, errno
-end
-
--- TODO get rid of this and just use path objects
-function Env:mkdir(fn)
-	if path(fn):exists() then
-		assert(path(fn):isdir(), "tried to mkdir on a file that is not a directory")
-	else
-		path(fn):mkdir(true)
-	end
 end
 
 function Env:getSources()
@@ -201,9 +192,9 @@ function Env:buildObj(obj, src)
 			self.compiler,
 			self.compileFlags,
 			self.compileCppVerFlag..self.cppver,
-		}:append(self.include:map(function(pathstr)
+		}:append(self.include:mapi(function(pathstr)
 			return self.compileIncludeFlag..path(pathstr):escape()
-		end)):append(self.macros:map(function(macro)
+		end)):append(self.macros:mapi(function(macro)
 			-- how to handle macro values with quotes?
 			-- yes I ran into this on msvc
 			-- how do osx/linux handle quotes and spaces in macros?
@@ -244,9 +235,9 @@ function Env:buildPCH(pch, header)
 			self.compileCppVerFlag..self.cppver,
 			'-x c++-header',
 			--'-Wno-pragma-once-outside-header',	-- clang-specific ... doesn't work in gcc
-		}:append(self.include:map(function(pathstr)
-			return self.compileIncludeFlag..path(pathstr):escape()
-		end)):append(self.macros:map(function(macro)
+		}:append(self.include:mapi(function(pathstr)
+			return ('%q'):format(self.compileIncludeFlag..path(pathstr))
+		end)):append(self.macros:mapi(function(macro)
 			if macro:find' ' or macro:find'"' then
 				macro = '"'..macro:gsub('"', '\\"')..'"'
 			end
@@ -284,10 +275,12 @@ function Env:buildDist(dist, objs)
 	distdir:mkdir(true)
 	self:exec(
 		table{self.linker, self.linkFlags}
-		:append(objs:map(function(obj) return path(obj):escape() end))
-		:append(self.libpaths:map(function(libpath) return path(self.linkLibPathFlag..libpath):escape() end))
-		:append(self.dynamicLibs:map(function(dynlib) return path(dynlib):escape() end))
-		:append(self.libs:map(function(lib) return self.linkLibFlag..lib end))
+		:append(objs:mapi(function(obj) return path(obj):escape() end))
+		:append(self.libpaths:mapi(function(libpath)
+			return ('%q'):format(tostring(self.linkLibPathFlag..path(libpath)))
+		end))
+		:append(self.dynamicLibs:mapi(function(dynlib) return path(dynlib):escape() end))
+		:append(self.libs:mapi(function(lib) return self.linkLibFlag..lib end))
 		:append{self.linkOutputFlag..path(dist):escape()}
 		:append{self.distLogFile and ('> '..self.distLogFile..' 2>&1') or nil}
 		:concat' ',
@@ -389,13 +382,13 @@ function GCC:getDependentHeaders(src, obj, buildingPCH)
 				self.compileCppVerFlag..self.cppver,
 			}:append{
 				buildingPCH and '-x c++-header' or nil,
-			}:append(self.macros:map(function(macro)
+			}:append(self.macros:mapi(function(macro)
 				-- matches Env:buildObj
 				if macro:find' ' or macro:find'"' then
 					macro = '"'..macro:gsub('"', '\\"')..'"'
 				end
 				return self.compileMacroFlag..macro
-			end)):append(self.include:map(function(pathstr)
+			end)):append(self.include:mapi(function(pathstr)
 				return self.compileIncludeFlag..path(pathstr):escape()
 			end))
 			--[[
@@ -514,11 +507,11 @@ function Linux:addDependLib(dependName, dependDir)
 		-- TODO hmm technically this should be built from the dependency buildinfo getPathToDist
 		..'/'..self:getPathToDist()
 	local deplib = deplibdir..'/'..deplibname
-	--[[ using -l and -L
+	-- [[ using -l and -L ... lets us change the runtime link path to the lib dir, so we can run it from the exe's cwd
 	self.libs:insert(1, dependName)
 	self.libpaths:insert(1, deplibdir)
 	--]]
-	-- [[ adding the .so and copying to dist path
+	--[[ adding the .so and copying to dist path ... works but then their relative path is from the build directory
 	self.dynamicLibs:insert(1, deplib)
 	--]]
 	self.dependLibs:insert(1, deplib)
