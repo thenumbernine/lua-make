@@ -556,7 +556,9 @@ function OSX:postConfig()
 	local dist = self:getDist()
 	local _, distname = path(dist):getdir()
 	if self.distType == 'lib' then
-		self.linkFlags = self.linkFlags .. ' -dynamiclib -undefined suppress -flat_namespace -install_name @rpath/'..distname
+		self.linkFlags = self.linkFlags .. ' -dynamiclib'
+			--..' -undefined suppress'
+			..' -flat_namespace -install_name @rpath/'..distname
 	end
 	if self.distType == 'app' then
 		self.linkFlags = self.linkFlags .. ' -Wl,-headerpad_max_install_names'
