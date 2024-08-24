@@ -401,6 +401,7 @@ function GCC:getDependentHeaders(src, obj, buildingPCH)
 				path(src):escape(),
 				'>',incdepfn,
 				--'2> /dev/null',	-- on osx/clang it likes to pipe out a whole bunch of extra stuff to stderr... but doing this also hides legit errors so ... :shrug:
+				--'2> >( grep -v "^\\." )',	-- i guess this pipes stderr into stdout ... pipe, not to file ... but it's bash-only, not working in os.execute which probably goes to system()
 			}:concat' ')
 		end,
 	}
