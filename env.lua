@@ -399,7 +399,8 @@ function GCC:getDependentHeaders(src, obj, buildingPCH)
 			:append{
 				self.compileGetIncludeFilesFlag,
 				path(src):escape(),
-				'>',incdepfn
+				'>',incdepfn,
+				'2> /dev/null',	-- on osx/clang it likes to pipe out a whole bunch of extra stuff to stderr...
 			}:concat' ')
 		end,
 	}
