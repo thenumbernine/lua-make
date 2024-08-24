@@ -24,6 +24,8 @@ targets:add{
 targets:run('dst1', 'dst2', ...)	-- should this be by some extra .name field, or should it be by .dsts? matching one .dsts?  matching all? how would that work.
 
 --]]
+local asserttype = require 'ext.assert'.type
+local asserteq = require 'ext.assert'.eq
 local class = require 'ext.class'
 local table = require 'ext.table'
 local path = require 'ext.path'
@@ -61,9 +63,11 @@ end
 
 local function times_lt(a, b)
 	if ffi
+	and type(a) == 'cdata'
 	and ffi.typeof(a) == ffi.typeof'struct timespec'
 	then
-		assert(ffi.typeof(b) == ffi.typeof'struct timespec')
+		asserttype(b, 'cdata')
+		asserteq(ffi.typeof(b), ffi.typeof'struct timespec')
 		if a.tv_sec ~= b.tv_sec then return a.tv_sec < b.tv_sec end
 		return a.tv_nsec < b.tv_nsec
 	else
@@ -74,6 +78,7 @@ end
 
 local function datestr(t)
 	if ffi
+	and type(t) == 'cdata'
 	and ffi.typeof(t) == ffi.typeof'struct timespec'
 	then
 		-- TODO instead ues the C function? so we don't lose bits ...
