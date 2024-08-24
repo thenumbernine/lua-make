@@ -400,7 +400,7 @@ function GCC:getDependentHeaders(src, obj, buildingPCH)
 				self.compileGetIncludeFilesFlag,
 				path(src):escape(),
 				'>',incdepfn,
-				'2> /dev/null',	-- on osx/clang it likes to pipe out a whole bunch of extra stuff to stderr...
+				--'2> /dev/null',	-- on osx/clang it likes to pipe out a whole bunch of extra stuff to stderr... but doing this also hides legit errors so ... :shrug:
 			}:concat' ')
 		end,
 	}
