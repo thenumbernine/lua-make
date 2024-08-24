@@ -624,6 +624,7 @@ function OSX:buildDist(dist, objs)
 		)
 
 		local resDir = distdir/'../Resources'
+		resDir:mkdir()
 		local resLibDir = resDir/'lib'
 		resLibDir:mkdir()
 
