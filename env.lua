@@ -558,7 +558,8 @@ function OSX:postConfig()
 	local _, distname = path(dist):getdir()
 	if self.distType == 'lib' then
 		self.linkFlags = self.linkFlags .. ' -dynamiclib'
-			--..' -undefined suppress'
+			--..' -undefined suppress'	-- deprecated
+			..' -undefined dynamic_lookup'
 			..' -flat_namespace -install_name @rpath/'..distname
 	end
 	if self.distType == 'app' then
