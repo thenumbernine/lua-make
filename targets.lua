@@ -64,10 +64,11 @@ end
 local function times_lt(a, b)
 	if ffi
 	and type(a) == 'cdata'
-	and ffi.typeof(a) == ffi.typeof'struct timespec'
+	--and ffi.typeof(a) == ffi.typeof'struct timespec'
 	then
 		asserttype(b, 'cdata')
-		asserteq(ffi.typeof(b), ffi.typeof'struct timespec')
+		--asserteq(ffi.typeof(b), ffi.typeof'struct timespec')
+		asserteq(ffi.typeof(b), ffi.typeof(a))
 		if a.tv_sec ~= b.tv_sec then return a.tv_sec < b.tv_sec end
 		return a.tv_nsec < b.tv_nsec
 	else
@@ -79,7 +80,7 @@ end
 local function datestr(t)
 	if ffi
 	and type(t) == 'cdata'
-	and ffi.typeof(t) == ffi.typeof'struct timespec'
+	--and ffi.typeof(t) == ffi.typeof'struct timespec'
 	then
 		-- TODO instead ues the C function? so we don't lose bits ...
 		return os.date('%Y-%m-%d %H:%M:%S', tonumber(t.tv_sec))..('.%06d'):format(tonumber(t.tv_nsec/1e+3))
