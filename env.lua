@@ -633,6 +633,7 @@ function OSX:buildDist(dist, objs)
 
 		-- copy over Resources
 		if path'res':exists() then
+			-- TODO this will error if the directory exists but is empty ...
 			self:exec('cp -R res/* "'..resDir..'"')
 			-- TODO
 			-- self:copyTree('*', 'res', resDir)
