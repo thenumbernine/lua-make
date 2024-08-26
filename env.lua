@@ -546,10 +546,6 @@ function OSX:preConfig()
 	self.platform = 'osx'
 	OSX.super.preConfig(self)
 	self.compiler = 'clang++'
-
-	-- TODO verify this
-	self.compileGetIncludeFilesFlag = '-H -fsyntax-only -MM'	-- I hear without -H it will search for includes *and* compile
-
 	self.linker = 'clang++'
 	self.libSuffix = '.dylib'
 end
