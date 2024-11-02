@@ -55,8 +55,8 @@ args:
 	rule
 --]]
 function Targets:add(args)
-	assert(args.dsts)
-	assert(args.rule)
+	assert.index(args, 'dsts')
+	assert.index(args, 'rule')
 	table.insert(self, args)
 end
 

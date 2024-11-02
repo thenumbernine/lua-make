@@ -1,6 +1,7 @@
 local class = require 'ext.class'
 local table = require 'ext.table'
 local path = require 'ext.path'
+local assert = require 'ext.assert'
 local io = require 'ext.io'
 local os = require 'ext.os'
 local string = require 'ext.string'
@@ -75,8 +76,8 @@ function Env:setupBuild(_build)
 	})
 
 	assert(loadfile('buildinfo', 'bt', loadenv))()
-	assert(self.distName)
-	assert(self.distType)
+	assert.index(self, 'distName')
+	assert.index(self, 'distType')
 
 	-- here we'll need to iterate through all depends, and all their depends, but not repeating
 	local depstodo = table(self.depends)
@@ -376,48 +377,56 @@ function GCC:getDependentHeaders(src, obj, buildingPCH)
 		rule = function(r)
 			path(incdepfn):getdir():mkdir(true)
 			-- copied from buildObject ... so maybe borrow that?
-			self:exec(table{
-				self.compiler,
-				self.compileFlags,
-				self.compileCppVerFlag..self.cppver,
-			}:append{
-				buildingPCH and '-x c++-header' or nil,
-			}:append(self.macros:mapi(function(macro)
-				-- matches Env:buildObj
-				if macro:find' ' or macro:find'"' then
-					macro = '"'..macro:gsub('"', '\\"')..'"'
-				end
-				return self.compileMacroFlag..macro
-			end)):append(self.include:mapi(function(pathstr)
-				return self.compileIncludeFlag..path(pathstr):escape()
-			end))
-			--[[
-			:append{
-				self.compileOutputFlag..path(obj):escape(),
-			}
-			--]]
-			:append{
-				self.compileGetIncludeFilesFlag,
-				path(src):escape(),
-				'>',incdepfn,
-				--'2> /dev/null',	-- on osx/clang it likes to pipe out a whole bunch of extra stuff to stderr... but doing this also hides legit errors so ... :shrug:
-				--'2> >( grep -v "^\\." )',	-- i guess this pipes stderr into stdout ... pipe, not to file ... but it's bash-only, not working in os.execute which probably goes to system()
-			}:concat' ')
+			local result, why, errno = self:exec(
+				table{
+					self.compiler,
+					self.compileFlags,
+					self.compileCppVerFlag..self.cppver,
+				}:append{
+					buildingPCH and '-x c++-header' or nil,
+				}:append(self.macros:mapi(function(macro)
+					-- matches Env:buildObj
+					if macro:find' ' or macro:find'"' then
+						macro = '"'..macro:gsub('"', '\\"')..'"'
+					end
+					return self.compileMacroFlag..macro
+				end)):append(self.include:mapi(function(pathstr)
+					return self.compileIncludeFlag..path(pathstr):escape()
+				end))
+				--[[
+				:append{
+					self.compileOutputFlag..path(obj):escape(),
+				}
+				--]]
+				:append{
+					self.compileGetIncludeFilesFlag,
+					path(src):escape(),
+					'>',incdepfn,
+					--'2> /dev/null',	-- on osx/clang it likes to pipe out a whole bunch of extra stuff to stderr... but doing this also hides legit errors so ... :shrug:
+					--'2> >( grep -v "^\\." )',	-- i guess this pipes stderr into stdout ... pipe, not to file ... but it's bash-only, not working in os.execute which probably goes to system()
+				}:concat' ',
+				false	-- don't throw upon fail yet so I can clean up the piped file ...
+			)
+			if not result then
+				-- ... if it failed to generate include dependencies then make sure to cleanup the piped output file (or else next time it'll error later)
+				path(incdepfn):remove()
+				error(why)
+			end
 		end,
 	}
 	self.targets:run(incdepfn)
 
-	local results = assert(path(incdepfn):read(), "failed to find include dependency file")
-	results = results:gsub('\\', ' '):gsub('%s+', '\n')
-	results = string.split(string.trim(results), '\n')
+	local resultstr = assert(path(incdepfn):read(), 'failed to find include dependency file')
+	resultstr = resultstr:gsub('\\', ' '):gsub('%s+', '\n')
+	local results = string.split(string.trim(resultstr), '\n')
 	-- TODO if I'm getting dependent headers *on* headers ... then the results still come back as .o extension
 	local objname = select(2, path(obj):getdir()).path
 	if buildingPCH then
 		objname = objname:gsub('%.h.gch$', '.o')
 	end
-	assert(results[1] == objname..':', results[1]..' should be '..objname)
+	assert.eq(results[1], objname..':', 'parsing include dependency obj failed from output:\n'..resultstr)
 	results:remove(1)
-	assert(results[1] == src, results[1]..' should be '..src)
+	assert.eq(results[1], src, 'parsing include dependency src failed from output:\n'..resultstr)
 	results:remove(1)
 	return results
 end
@@ -436,7 +445,7 @@ local function splitPkgConfigArgs(s, prefix)
 	-- idk what I'll do about qoute-wrapped args ...
 	if prefix then
 		t = t:mapi(function(fn)
-			assert(fn:sub(1,#prefix) == prefix, "hmm, pkg-config argument expected to have prefix "..prefix.." but didn't have it: "..fn)
+			assert.eq(fn:sub(1,#prefix), prefix, "hmm, pkg-config argument expected to have prefix "..prefix.." but didn't have it: "..fn)
 			return fn:sub(#prefix+1)
 		end)
 	end
@@ -882,7 +891,7 @@ end
 
 function MSVC:buildDist(dist, objs)
 	-- technically you can ... but I am avoiding these for now
-	assert(#self.libpaths == 0, "can't link to libpaths with windows")
+	assert.len(self.libpaths, 0, "can't link to libpaths with windows")
 
 	local distdir = path(dist):getdir()
 	distdir:mkdir()
