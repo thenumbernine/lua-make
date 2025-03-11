@@ -137,6 +137,7 @@ local function doBuild(args)
 
 					-- see if we can search for the include the files that this source file depends on
 					-- TODO this as a rule so we don't have to regenerate them for untouched files
+					-- TODO env:getDependentHeaders() uses targets too  ... maybe move it into make/run.lua?
 					local dependentHeaders = env:getDependentHeaders(src, obj)
 
 					-- if the source file has been modified since the obj was created
@@ -147,8 +148,15 @@ local function doBuild(args)
 					env.targets:add{
 						dsts = {obj},
 						srcs = table.append({src}, dependentHeaders),
-						rule = function()
-							assert(env:buildObj(obj, src))
+
+						rule = function(r)
+							-- [[ setup env specific for the file here
+							-- here and make/env.lua Env:getDependentHeaders()
+							local fileEnv = Env(env)
+							if r.setupEnv then r:setupEnv(fileEnv) end
+							--]]
+
+							assert(fileEnv:buildObj(obj, src))
 						end,
 					}
 				end
@@ -162,6 +170,13 @@ local function doBuild(args)
 					env:buildDist(dist, objs)
 				end,
 			}
+
+			-- [[ hack for changing any build targets
+			-- here and make/env.lua Env:getDependentHeaders()
+			if env.configTargets then
+				env:configTargets(env.targets)	-- in this call the arg matches the global scope 'targets'
+			end
+			--]]
 
 			env.targets:run(dist)
 		end

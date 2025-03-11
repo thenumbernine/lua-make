@@ -1,8 +1,7 @@
 local os = require 'ext.os'	-- make sure os.execute has the right return value api
 local function exec(cmd, must, platform)
-	print('>> '..cmd)
 	if must or must == nil then
-		local result, why, errno = os.execute(cmd)
+		local result, why, errno = os.exec(cmd)	-- exec = print-and-execute
 		if not result then
 			if not (({
 				-- windows platforms are giving me trouble with os.execute on luajit ...
@@ -15,7 +14,7 @@ local function exec(cmd, must, platform)
 		end
 		return result, why, errno
 	else
-		return os.execute(cmd)
+		return os.exec(cmd)	-- exec = print-and-execute
 	end
 end
 return exec

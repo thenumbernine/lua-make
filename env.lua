@@ -12,7 +12,7 @@ local Targets = require 'make.targets'
 
 local Env = class()
 
-function Env:init()
+function Env:init(srcEnv)
 	require 'ext.env'(self)
 	self.targets = Targets()
 	self.env = self
@@ -23,6 +23,17 @@ function Env:init()
 	self.distDir = 'dist'
 	self.incDepDir = 'incdep'	-- where to put include file dependencies
 	--self.pchDir = 'incbin'
+
+	if srcEnv then
+		for k,v in pairs(srcEnv) do
+			self[k] = v
+			-- TODO appropriate deep copy when necessary
+			if type(v) == 'table' then
+				self[k] = table(v)
+				setmetatable(self[k], getmetatable(v))
+			end
+		end
+	end
 end
 
 function Env:resetMacros()
@@ -371,35 +382,44 @@ function GCC:getDependentHeaders(src, obj, buildingPCH)
 	incdepfn = incdepfn:gsub('%.cpp$', '.incdep')	-- what suffix do lists of include files have?
 
 	-- use the targets system so we dont have to rebuild it if the source file wasn't touched
-	self.targets:add{
+	-- but use a dif system so I still have one unique rule per cpp file in this Targets() and the one in doBuild()
+	local targets = self.targets -- Targets()
+	targets:add{
 		dsts = {incdepfn},
 		srcs = {src},
+		cfg = {},
 		rule = function(r)
+			-- [[ setup env specific for the file here
+			-- here and make/run.lua doBuild()
+			local fileEnv = Env(self)
+			if r.setupEnv then r:setupEnv(fileEnv) end
+			--]]
+
 			path(incdepfn):getdir():mkdir(true)
 			-- copied from buildObject ... so maybe borrow that?
-			local result, why, errno = self:exec(
+			local result, why, errno = fileEnv:exec(
 				table{
-					self.compiler,
-					self.compileFlags,
-					self.compileCppVerFlag..self.cppver,
+					fileEnv.compiler,
+					fileEnv.compileFlags,
+					fileEnv.compileCppVerFlag..fileEnv.cppver,
 				}:append{
 					buildingPCH and '-x c++-header' or nil,
-				}:append(self.macros:mapi(function(macro)
+				}:append(fileEnv.macros:mapi(function(macro)
 					-- matches Env:buildObj
 					if macro:find' ' or macro:find'"' then
 						macro = '"'..macro:gsub('"', '\\"')..'"'
 					end
-					return self.compileMacroFlag..macro
-				end)):append(self.include:mapi(function(pathstr)
-					return self.compileIncludeFlag..path(pathstr):escape()
+					return fileEnv.compileMacroFlag..macro
+				end)):append(fileEnv.include:mapi(function(pathstr)
+					return fileEnv.compileIncludeFlag..path(pathstr):escape()
 				end))
 				--[[
 				:append{
-					self.compileOutputFlag..path(obj):escape(),
+					fileEnv.compileOutputFlag..path(obj):escape(),
 				}
 				--]]
 				:append{
-					self.compileGetIncludeFilesFlag,
+					fileEnv.compileGetIncludeFilesFlag,
 					path(src):escape(),
 					'>',incdepfn,
 					--'2> /dev/null',	-- on osx/clang it likes to pipe out a whole bunch of extra stuff to stderr... but doing this also hides legit errors so ... :shrug:
@@ -414,7 +434,18 @@ function GCC:getDependentHeaders(src, obj, buildingPCH)
 			end
 		end,
 	}
-	self.targets:run(incdepfn)
+
+	-- [[ hack for changing any build targets
+	-- here and make/run.lua doBuild()
+	if self.configTargets then
+		self:configTargets(targets)	-- in this call the arg is a private 'Targets()' object
+	end
+	--]]
+
+	-- TODO maybe ... instead of targets:run(incdepfn) here,
+	-- can I instead put the incdep file as a source of ... nah, because its contents need to be the source too ...
+	-- then maybe I should use a separate 'targets' system, so that dependencies don't get mixed up?
+	targets:run(incdepfn)
 
 	local resultstr = assert(path(incdepfn):read(), 'failed to find include dependency file')
 	resultstr = resultstr:gsub('\\', ' '):gsub('%s+', '\n')

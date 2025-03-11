@@ -152,11 +152,20 @@ function Targets:needsUpdate(rule)
 	return false
 end
 
-function Targets:ruleIndex(dst)
-	for j,r in ipairs(self) do
+function Targets:ruleForSrc(src)
+	for i,r in ipairs(self) do
+		if table.find(r.srcs, src) then
+			-- TODO return multiple indexes?
+			return r, i
+		end
+	end
+end
+
+function Targets:ruleForDst(dst)
+	for i,r in ipairs(self) do
 		if table.find(r.dsts, dst) then
 			-- TODO return multiple indexes?
-			return j
+			return r, i
 		end
 	end
 end
@@ -165,7 +174,7 @@ function Targets:run(...)
 	local indexes = {}
 	for i=1,select('#', ...) do
 		local dst = select(i, ...)
-		local index = self:ruleIndex(dst)
+		local index = select(2, self:ruleForDst(dst))
 		if index then
 			indexes[index] = true
 		else
@@ -180,7 +189,7 @@ function Targets:run(...)
 		-- TODO this in parallel?
 		for _,src in ipairs(r.srcs) do
 			-- if 'src' might need to be built too ...
-			if self:ruleIndex(src) then
+			if self:ruleForDst(src) then
 				-- make sure it is up to date also ...
 				-- TODO keep track of src's and only check them once per :run(dst) ...
 				self:run(src)
