@@ -3,52 +3,6 @@
 lua /path/to/make/run.lua [cmd]
 reads buildinfo
 cmd is: build debug release clean distclean
-
-globals defined per-project:
-distName = name of the project
-distType = type of the project.
-	possible options are:
-		'app' for applications / executables
-		'lib' for libraries
-		'inc' for include files (no code / nothing to build, but still used for buildinfo dependencies)
-depends = list of paths to projects that this is dependent upon
-
-globals defined by lua-make:
-home = home directory.
-platform = build platform.
-build = 'debug' or 'release'.
-objSuffix = suffix of object file.  '.o' on unix systems, '.obj' in M$ systems.
-libPrefix = prefix of library files.  'lib' on unix systems.
-libSuffix = lib suffix. '.so', '.dylib', '.a', '.lib', '.dll', etc.
-appSuffix = executable suffix.  empty on unix systems, '.exe' for M$.
-compiler = compiler binary name.  g++, clang++, cl.exe, etc...
-compileFlags = flags to pass to compiler.
-compileIncludeFlag = flag for include directory.
-compileMacroFlag = flag for C++ macros.
-compileOutputFlag = flag for output filename.
-compileGetIncludeFilesFlag = flag for getting include files referenced by this file
-including = flag set if this bulidinfo is being interpreted from another buildinfo
-linker = linker binary name.
-linkLibPathFlag = flag for adding library search paths.
-linkLibFlag = flag for adding libraries.
-linkOutputFlag = flag for specifying the output filename.
-linkFlags = extra flags to send to the linker
-pthread = flag for including pthread.
-cppver = C++ version.
-include = table of include directories to forward to the C++ compiler.
-dependLibs = other luamake projects that the project is dependent upon (for executing recursive buildinfos).
-libs = -l libraries, be they static or dynamic, automatically detected by the compiler/linker.
-libpaths = -L search paths for 'libs'.
-dynamicLibs
-	on linux this contains paths to explicit .so files
-	on osx this is .dylib files
-	on windows this is .lib files associated with .dll files (as opposed to the .lib files that are static libraries ... smh windows)
-
-objLogFile = filename to save output of buildObj
-distLogFile = filename to save output of buildDist
-
-fileCfgs[filename] = function(fileEnv) = per-file callback that can be registered to configure the per-file environment, in case any files need vars changed from the global env
-
 --]]
 local table = require 'ext.table'
 local Targets = require 'make.targets'
