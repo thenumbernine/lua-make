@@ -54,6 +54,7 @@ function Env:preConfig()
 	self.libs = table()
 	self.dependLibs = table()
 	self.dynamicLibs = table()
+	self.fileCfgs = {}
 end
 
 function Env:postConfig()
@@ -392,7 +393,8 @@ function GCC:getDependentHeaders(src, obj, buildingPCH)
 			-- [[ setup env specific for the file here
 			-- here and make/run.lua doBuild()
 			local fileEnv = Env(self)
-			if r.setupEnv then r:setupEnv(fileEnv) end
+			local f  = self.fileCfgs[src]
+			if f then f(fileEnv) end
 			--]]
 
 			path(incdepfn):getdir():mkdir(true)
@@ -434,13 +436,6 @@ function GCC:getDependentHeaders(src, obj, buildingPCH)
 			end
 		end,
 	}
-
-	-- [[ hack for changing any build targets
-	-- here and make/run.lua doBuild()
-	if self.configTargets then
-		self:configTargets(targets)	-- in this call the arg is a private 'Targets()' object
-	end
-	--]]
 
 	-- TODO maybe ... instead of targets:run(incdepfn) here,
 	-- can I instead put the incdep file as a source of ... nah, because its contents need to be the source too ...

@@ -46,6 +46,9 @@ dynamicLibs
 
 objLogFile = filename to save output of buildObj
 distLogFile = filename to save output of buildDist
+
+fileCfgs[filename] = function(fileEnv) = per-file callback that can be registered to configure the per-file environment, in case any files need vars changed from the global env
+
 --]]
 local table = require 'ext.table'
 local Targets = require 'make.targets'
@@ -153,7 +156,8 @@ local function doBuild(args)
 							-- [[ setup env specific for the file here
 							-- here and make/env.lua Env:getDependentHeaders()
 							local fileEnv = Env(env)
-							if r.setupEnv then r:setupEnv(fileEnv) end
+							local f  = env.fileCfgs[src]
+							if f then f(fileEnv) end
 							--]]
 
 							assert(fileEnv:buildObj(obj, src))
@@ -167,16 +171,16 @@ local function doBuild(args)
 				dsts = {dist},
 				srcs = objs,
 				rule = function()
-					env:buildDist(dist, objs)
+					-- [[ setup env specific for the file here
+					-- here and above and make/env.lua Env:getDependentHeaders()
+					local fileEnv = Env(env)
+					local f  = env.fileCfgs[src]
+					if f then f(fileEnv) end
+					--]]
+
+					fileEnv:buildDist(dist, objs)
 				end,
 			}
-
-			-- [[ hack for changing any build targets
-			-- here and make/env.lua Env:getDependentHeaders()
-			if env.configTargets then
-				env:configTargets(env.targets)	-- in this call the arg matches the global scope 'targets'
-			end
-			--]]
 
 			env.targets:run(dist)
 		end
