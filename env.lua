@@ -525,6 +525,7 @@ function Linux:buildDist(dist, objs)
 			local dst = libdir/name
 			print('copying from '..src..' to '..dst)
 			self:exec('cp "'..src..'" "'..dst..'"')
+			self:exec('chmod 644 "'..dst..'"')
 		end
 		--]]
 		-- [[ copy res/ folder into the dist folder
@@ -677,6 +678,7 @@ function OSX:buildDist(dist, objs)
 			local dst = resLibDir/name
 			print('copying from '..src..' to '..dst)
 			self:exec('cp "'..src..'" "'..dst..'"')
+			self:exec('chmod 644 "'..dst..'"')
 			self:exec('install_name_tool -change '..src..' \\@executable_path/../Resources/lib/'..name..' '..dist)
 			self:exec('install_name_tool -change \\@rpath/'..name..' \\@executable_path/../Resources/lib/'..name..' '..dist)
 		end
