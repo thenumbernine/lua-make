@@ -687,7 +687,10 @@ function OSX:buildDist(dist, objs)
 end
 
 function OSX:getResourcePath()
-	return self:getPathToDist()..'/../Resources'
+	assert.eq(self.distType, 'app')	-- otherwise this path will be in the wrong place
+	-- getPathToDist() is still just dist/$plat/$build for OSX
+	-- getDistSuffix has the subsequent paths within the .app file
+	return path(self:getDist()):getdir()..'/../Resources'
 end
 
 function OSX:addDependLib(dependName, dependDir)
