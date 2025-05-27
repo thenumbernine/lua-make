@@ -402,7 +402,7 @@ function GCC:getDependentHeaders(src, obj, buildingPCH)
 			local result, why, errno = fileEnv:exec(
 				table{
 					fileEnv.compiler,
-					fileEnv.compileFlags,
+					fileEnv.compileFlags,	-- TODO this has -c /c whatever but for this command it's not needed...
 					fileEnv.compileCppVerFlag..fileEnv.cppver,
 				}:append{
 					buildingPCH and '-x c++-header' or nil,
@@ -851,7 +851,7 @@ function MSVC:preConfig()
 	self.linkOutputFlag = '/out:'
 	MSVC.super.preConfig(self)
 	-- sometimes it works, sometimes it doesn't
-	--self.macros:insert'_USE_MATH_DEFINES'
+	self.macros:insert'_USE_MATH_DEFINES'
 end
 
 function MSVC:getSources()
