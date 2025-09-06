@@ -204,6 +204,7 @@ function Env:buildObj(obj, src)
 		table{
 			self.compiler,
 			self.compileFlags,
+			self.compileCodeFlag,
 			self.compileCppVerFlag..self.cppver,
 		}:append(self.include:mapi(function(pathstr)
 			return self.compileIncludeFlag..path(pathstr):escape()
@@ -245,6 +246,7 @@ function Env:buildPCH(pch, header)
 		table{
 			self.compiler,
 			self.compileFlags,
+			self.compileCodeFlag,	-- do you need -c when building .pch files?
 			self.compileCppVerFlag..self.cppver,
 			'-x c++-header',
 			--'-Wno-pragma-once-outside-header',	-- clang-specific ... doesn't work in gcc
@@ -334,7 +336,7 @@ function GCC:preConfig()
 	self.libSuffix = '.so'
 	self.appSuffix = ''
 	self.compiler = 'g++'
-	self.compileFlags = '-c -Wall -fPIC'
+	self.compileFlags = '-Wall -fPIC'
 	if self.build == 'debug' then
 		self.compileFlags = self.compileFlags .. ' -O0 -gdwarf-2'
 	elseif self.build == 'release' then
@@ -343,6 +345,7 @@ function GCC:preConfig()
 	self.compileIncludeFlag = '-I'
 	self.compileMacroFlag = '-D'
 	self.compileOutputFlag = '-o '	-- space ... because with msvc there shouldn't be a space
+	self.compileCodeFlag = '-c'
 	self.compileGetIncludeFilesFlag = '-MM'	-- use -M to get system files as well
 	self.compileCppVerFlag = '-std='
 	self.linker = 'g++'
@@ -828,7 +831,7 @@ function MSVC:preConfig()
 	self.libSuffix = '.dll'
 	self.appSuffix = '.exe'
 	self.compiler = 'cl.exe'
-	self.compileFlags = '/nologo /c /EHsc'
+	self.compileFlags = '/nologo /EHsc'
 	-- no /Wall, because msvc adds extra crap to Wall
 	if self.build == 'debug' then
 		self.compileFlags = self.compileFlags .. ' /Od /Zi'
@@ -838,6 +841,7 @@ function MSVC:preConfig()
 	self.compileOutputFlag = '/Fo'
 	self.compileIncludeFlag = '/I'
 	self.compileMacroFlag = '/D'
+	self.compileCodeFlag = '/c'	-- does /EHsc go with /c? i.e. when using /showIncludes can I not use /EHsc?
 
 	-- right now this isn't set up to even run.  only GCC compilers do dependency checking.  so TODO test this.
 	self.compileGetIncludeFilesFlag = '/showIncludes'
@@ -1070,8 +1074,9 @@ ClangWindows.name = 'clang_win'
 function ClangWindows:preConfig()
 	ClangWindows.super.preConfig(self)
 	self.platform = 'clang_win'
-	self.compileFlags = '-c -Wall -Xclang -flto-visibility-public-std'	-- -fPIC complains
+	self.compileFlags = '-Wall -Xclang -flto-visibility-public-std'	-- -fPIC complains
 	self.compiler = 'clang++.exe'
+	self.compileCodeFlag = '-c'
 	self.compileGetIncludeFilesFlag = '-H -fsyntax-only -MM'	-- just like OSX ... consider a common root for clang compilers?
 	self.linker = 'clang++.exe'
 	self.objSuffix = '.o'
