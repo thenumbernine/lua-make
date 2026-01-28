@@ -1,17 +1,22 @@
+--------------------------------------------
+-- generated with dist/build-distinfo.rua --
+--------------------------------------------
+
 name = "make"
 files = {
-	["README.md"] = "make/README.md",
-	["clean.lua"] = "make/clean.lua",
-	["detect.lua"] = "make/detect.lua",
-	["distclean.lua"] = "make/distclean.lua",
-	["env.lua"] = "make/env.lua",
-	["exec.lua"] = "make/exec.lua",
-	["find.lua"] = "make/find.lua",
-	["make-dev-1.rockspec"] = "make/make-dev-1.rockspec",
-	["make.lua"] = "make/make.lua",
-	["run.lua"] = "make/run.lua",
-	["targets.lua"] = "make/targets.lua",
-	["writechanged.lua"] = "make/writechanged.lua",
+	"README.md",
+	"clean.lua",
+	"detect.lua",
+	"distclean.lua",
+	"distinfo",
+	"env.lua",
+	"exec.lua",
+	"find.lua",
+	"make-dev-1.rockspec",
+	"make.lua",
+	"run.lua",
+	"targets.lua",
+	"writechanged.lua",
 }
 deps = {
 	"ext",
