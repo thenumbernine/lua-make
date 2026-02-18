@@ -207,4 +207,14 @@ function Targets:run(...)
 	end
 end
 
+function Targets:runAll()
+	local allDsts = table()
+	for _,r in ipairs(self) do
+		for _,dst in ipairs(r.dsts) do
+			allDsts:insertUnique(dst)	-- slow but in-order
+		end
+	end
+	return self:run(allDsts:unpack())
+end
+
 return Targets
