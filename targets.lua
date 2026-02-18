@@ -58,6 +58,7 @@ function Targets:add(args)
 	assert.index(args, 'dsts')
 	assert.index(args, 'rule')
 	table.insert(self, args)
+	return self	-- me being lazy
 end
 
 local function times_lt(a, b)
