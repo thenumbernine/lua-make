@@ -96,6 +96,9 @@ end
 -- expects indexed tables. rule.srcs, rule.dsts
 function Targets:needsUpdate(rule)
 	local dstModTime
+	if self.verbose then
+		print()
+	end
 	for _,dst in ipairs(rule.dsts) do
 		if not path(dst):exists() then return true end
 
@@ -108,6 +111,9 @@ function Targets:needsUpdate(rule)
 			return true
 		end
 		local dstAttrTime = dstAttr.modification_ns or dstAttr.modification
+		if self.verbose then
+			print('dst', datestr(dstAttrTime), dst)
+		end
 		if not dstModTime then
 			dstModTime = dstAttrTime
 		else
@@ -116,7 +122,7 @@ function Targets:needsUpdate(rule)
 			end
 		end
 	end
-	-- if any were nil then we alreayd returned true
+	-- if any were nil then we already returned true
 	-- so if this condition si hit then that means we have an empty dsts
 	if not dstModTime then error("hmm, seems you have no dsts") end
 
@@ -127,6 +133,9 @@ function Targets:needsUpdate(rule)
 	for _,src in ipairs(rule.srcs) do
 		local srcAttr = assert(path(src):attr())
 		local srcAttrTime = srcAttr.modification_ns or srcAttr.modification
+		if self.verbose then
+			print('src', datestr(srcAttrTime), src)
+		end
 		if not srcModTime then
 			srcModTime = srcAttrTime
 		else
@@ -144,13 +153,17 @@ function Targets:needsUpdate(rule)
 
 	if not times_lt(srcModTime, dstModTime) then
 		if self.verbose then
-			print(' *** target not up-to-date: '..table.concat(rule.dsts, ', ')..' ('..datestr(dstModTime)..' vs '..datestr(srcModTime)..') -- rebuilding!')
+			print(' *** target not up-to-date: '
+				..table(rule.dsts):mapi(tostring):concat', '..' ('..datestr(dstModTime)
+				..' vs '..datestr(srcModTime)..') -- rebuilding!')
 		end
 		return true
 	end
 
 	if self.verbose then
-		print(' *** target up-to-date: '..table.concat(rule.dsts, ', ')..' ('..datestr(dstModTime)..' vs '..datestr(srcModTime)..')')
+		print(' *** target up-to-date: '
+			..table(rule.dsts):mapi(tostring):concat', '..' ('..datestr(dstModTime)
+			..' vs '..datestr(srcModTime)..')')
 	end
 	return false
 end
